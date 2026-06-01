@@ -1,0 +1,31 @@
+{
+  "name": "fitsocial",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "backend:dev": "cd backend && npm run dev",
+    "backend:build": "cd backend && npm run build",
+    "backend:test": "cd backend && npm run test",
+    "backend:lint": "cd backend && npm run lint",
+    "mobile:start": "cd mobile && npm start",
+    "mobile:lint": "cd mobile && npm run lint",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3",
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0"
+  },
+  "lint-staged": {
+    "backend/**/*.{ts,tsx}": [
+      "prettier --write"
+    ],
+    "mobile/**/*.{ts,tsx}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
