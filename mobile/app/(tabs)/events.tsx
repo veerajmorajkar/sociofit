@@ -10,12 +10,16 @@ import {
   Platform,
   Pressable,
   Alert,
+  TextInput,
+  Animated,
+  Easing,
 } from 'react-native';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, type RefObject } from 'react';
 import { router } from 'expo-router';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MapPin, CalendarDays, Users, Plus } from 'lucide-react-native';
+import { MapPin, CalendarDays, Users, Plus, Search, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import TabBarBottomFade from '@/components/ui/TabBarBottomFade';
 import { useEvents, useCategories, useRsvpEvent } from '@/hooks/useEvents';
@@ -35,6 +39,143 @@ const STATIC_FILTERS = [
   { slug: 'fun_events', name: 'FUN' },
 ];
 
+const SEARCH_BAR_HEIGHT = 44;
+const SEARCH_GAP = 10; // matches navBar paddingBottom — equal above bar & below bar → filters
+const SEARCH_PANEL_HEIGHT = SEARCH_GAP + SEARCH_BAR_HEIGHT + SEARCH_GAP;
+
+type FilterTab = { slug: string; name: string };
+
+function EventsTopChrome({
+  searchExpanded,
+  searchQuery,
+  onSearchQueryChange,
+  onToggleSearch,
+  onCloseSearch,
+  searchProgress,
+  searchInputRef,
+  filterTabs,
+  activeCategory,
+  onCategoryChange,
+}: {
+  searchExpanded: boolean;
+  searchQuery: string;
+  onSearchQueryChange: (q: string) => void;
+  onToggleSearch: () => void;
+  onCloseSearch: () => void;
+  searchProgress: Animated.Value;
+  searchInputRef: RefObject<TextInput | null>;
+  filterTabs: FilterTab[];
+  activeCategory: string;
+  onCategoryChange: (slug: string) => void;
+}) {
+  const searchHeight = searchProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, SEARCH_PANEL_HEIGHT],
+  });
+  const searchOpacity = searchProgress.interpolate({
+    inputRange: [0, 0.35, 1],
+    outputRange: [0, 0, 1],
+  });
+  const isInteractive = searchExpanded;
+
+  return (
+    <SafeAreaView edges={['top']} style={s.navSafe}>
+      <View style={s.navBar}>
+        <Pressable
+          onPress={onToggleSearch}
+          hitSlop={12}
+          style={s.navHit}
+          accessibilityLabel={searchExpanded ? 'Close event search' : 'Search events'}
+          accessibilityRole="button"
+        >
+          <Search
+            size={22}
+            strokeWidth={1.75}
+            color={searchExpanded ? colors.tealPrimary : colors.textPrimary}
+          />
+        </Pressable>
+
+        <View style={s.navTitleWrap}>
+          <Text style={s.navTitle}>EVENTS</Text>
+        </View>
+
+        <View style={s.navSide}>
+          <TouchableOpacity
+            onPress={() => router.push('/event/create' as never)}
+            style={s.headerCreateBtn}
+            activeOpacity={0.8}
+            accessibilityLabel="Create event"
+          >
+            <Plus size={18} strokeWidth={2.5} color={colors.onTeal} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <Animated.View
+        pointerEvents={isInteractive ? 'auto' : 'none'}
+        style={[s.searchPanel, { height: searchHeight }]}
+        collapsable={false}
+      >
+        <Animated.View style={[s.searchPanelInner, { opacity: searchOpacity }]}>
+          <View style={s.searchBar}>
+            <Search size={18} strokeWidth={1.75} color={colors.textMuted} />
+            <TextInput
+              ref={searchInputRef}
+              style={s.searchInput}
+              placeholder="Search events…"
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={onSearchQueryChange}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+              clearButtonMode="never"
+              editable={isInteractive}
+            />
+            {searchQuery.length > 0 ? (
+              <Pressable
+                onPress={() => onSearchQueryChange('')}
+                hitSlop={8}
+                accessibilityLabel="Clear search"
+              >
+                <X size={18} strokeWidth={2} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={onCloseSearch}
+              hitSlop={8}
+              style={s.searchCloseBtn}
+              accessibilityLabel="Close search"
+            >
+              <X size={20} strokeWidth={2} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+        </Animated.View>
+      </Animated.View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.filterBar}
+        style={s.filterBarWrapper}
+      >
+        {filterTabs.map((tab) => (
+          <TouchableOpacity
+            key={tab.slug}
+            onPress={() => onCategoryChange(tab.slug)}
+            style={[s.filterChip, activeCategory === tab.slug && s.filterChipActive]}
+            activeOpacity={0.75}
+          >
+            <Text style={[s.filterChipText, activeCategory === tab.slug && s.filterChipTextActive]}>
+              {tab.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 // ── Event Discovery Card ─────────────────────────────────────
 function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => void }) {
   const isFree = !event.priceInr || event.priceInr === 0;
@@ -48,6 +189,30 @@ function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => voi
       style={s.card}
       accessibilityLabel={event.title}
     >
+      <View style={s.cardBadgeRow} pointerEvents="none">
+        <View
+          style={[
+            s.organiserTypeBadge,
+            isClubOrganiser ? s.organiserTypeClub : s.organiserTypePerson,
+          ]}
+        >
+          <Text
+            style={[
+              s.organiserTypeText,
+              isClubOrganiser ? s.organiserTypeTextClub : s.organiserTypeTextPerson,
+            ]}
+          >
+            {isClubOrganiser ? 'CLUB' : 'PERSON'}
+          </Text>
+        </View>
+        {isLive ? (
+          <View style={s.liveBadge}>
+            <View style={s.liveDot} />
+            <Text style={s.liveBadgeText}>LIVE</Text>
+          </View>
+        ) : null}
+      </View>
+
       {/* Cover image area — category gradient */}
       <View style={s.coverArea}>
         <LinearGradient
@@ -56,12 +221,6 @@ function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => voi
           end={{ x: 1, y: 1 }}
           style={s.coverPlaceholder}
         />
-        {isLive && (
-          <View style={s.liveBadge}>
-            <View style={s.liveDot} />
-            <Text style={s.liveBadgeText}>LIVE</Text>
-          </View>
-        )}
         {!isFree && (
           <View style={s.priceBadge}>
             <Text style={s.priceBadgeText}>{formatPrice(event.priceInr)}</Text>
@@ -149,6 +308,13 @@ function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => voi
 // ── Main Events Screen ───────────────────────────────────────
 export default function EventsScreen() {
   const [activeCategory, setActiveCategory] = useState('all');
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery.trim(), 300);
+  const searchProgress = useRef(new Animated.Value(0)).current;
+  const searchAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const searchInputRef = useRef<TextInput>(null);
+
   const { data: categories } = useCategories();
   const { mutate: toggleRsvp } = useRsvpEvent();
   const rsvpBusyRef = useRef<string | null>(null);
@@ -162,8 +328,10 @@ export default function EventsScreen() {
     isError,
     refetch,
     isRefetching,
+    isFetching,
   } = useEvents({
     category: activeCategory === 'all' ? undefined : activeCategory,
+    search: debouncedSearch || undefined,
   });
 
   useRefreshOnFocus(refetch);
@@ -182,30 +350,51 @@ export default function EventsScreen() {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const renderHeader = () => (
-    <>
-      {/* Sticky category filter bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.filterBar}
-        style={s.filterBarWrapper}
-      >
-        {filterTabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.slug}
-            onPress={() => setActiveCategory(tab.slug)}
-            style={[s.filterChip, activeCategory === tab.slug && s.filterChipActive]}
-            activeOpacity={0.75}
-          >
-            <Text style={[s.filterChipText, activeCategory === tab.slug && s.filterChipTextActive]}>
-              {tab.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </>
+  const runSearchAnimation = useCallback(
+    (toValue: number, onEnd?: () => void) => {
+      searchAnimRef.current?.stop();
+      searchAnimRef.current =
+        toValue === 0
+          ? Animated.timing(searchProgress, {
+              toValue: 0,
+              duration: 240,
+              easing: Easing.inOut(Easing.cubic),
+              useNativeDriver: false,
+            })
+          : Animated.spring(searchProgress, {
+              toValue: 1,
+              useNativeDriver: false,
+              tension: 88,
+              friction: 11,
+              overshootClamping: true,
+            });
+      searchAnimRef.current.start(({ finished }) => {
+        if (finished) onEnd?.();
+      });
+    },
+    [searchProgress],
   );
+
+  const openSearch = useCallback(() => {
+    setSearchExpanded(true);
+    searchProgress.setValue(0);
+    runSearchAnimation(1, () => {
+      searchInputRef.current?.focus();
+    });
+  }, [searchProgress, runSearchAnimation]);
+
+  const closeSearch = useCallback(() => {
+    searchInputRef.current?.blur();
+    runSearchAnimation(0, () => {
+      setSearchExpanded(false);
+      setSearchQuery('');
+    });
+  }, [runSearchAnimation]);
+
+  const toggleSearch = useCallback(() => {
+    if (searchExpanded) closeSearch();
+    else openSearch();
+  }, [searchExpanded, openSearch, closeSearch]);
 
   const renderEmpty = () => {
     if (isLoading) {
@@ -227,11 +416,16 @@ export default function EventsScreen() {
         </View>
       );
     }
+    const isSearchActive = debouncedSearch.length > 0;
     return (
       <View style={s.emptyState}>
         <MapPin size={40} strokeWidth={1.5} color={colors.text4} />
-        <Text style={s.emptyTitle}>NO EVENTS YET</Text>
-        <Text style={s.emptyBody}>Be the first — host an event for others to join</Text>
+        <Text style={s.emptyTitle}>{isSearchActive ? 'NO MATCHING EVENTS' : 'NO EVENTS YET'}</Text>
+        <Text style={s.emptyBody}>
+          {isSearchActive
+            ? 'Try a different keyword or category'
+            : 'Be the first — host an event for others to join'}
+        </Text>
         <TouchableOpacity
           onPress={() => router.push('/event/create' as never)}
           style={s.createBtn}
@@ -252,21 +446,19 @@ export default function EventsScreen() {
     ) : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {/* Header */}
-      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.bg }}>
-        <View style={s.screenHeader}>
-          <Text style={s.screenTitle}>EVENTS</Text>
-          <TouchableOpacity
-            onPress={() => router.push('/event/create' as never)}
-            style={s.headerCreateBtn}
-            activeOpacity={0.8}
-            accessibilityLabel="Create event"
-          >
-            <Plus size={20} strokeWidth={2.5} color={colors.textInverse} />
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+    <View style={s.root}>
+      <EventsTopChrome
+        searchExpanded={searchExpanded}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onToggleSearch={toggleSearch}
+        onCloseSearch={closeSearch}
+        searchProgress={searchProgress}
+        searchInputRef={searchInputRef}
+        filterTabs={filterTabs}
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
+      />
 
       <View style={{ flex: 1 }}>
         <FlatList
@@ -299,7 +491,6 @@ export default function EventsScreen() {
               }}
             />
           )}
-          ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           onEndReached={onEndReached}
@@ -322,36 +513,98 @@ export default function EventsScreen() {
 }
 
 const s = StyleSheet.create({
-  // ── Screen header ──
-  screenHeader: {
+  root: {
+    flex: 1,
+    backgroundColor: colors.bgPrimary,
+  },
+
+  // ── Top chrome (matches notifications nav) ──
+  navSafe: {
+    backgroundColor: colors.bgPrimary,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.surface3,
+  },
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    minHeight: 44,
   },
-  screenTitle: {
-    fontFamily: fonts.heading,
-    fontSize: 24,
-    color: colors.text1,
-    letterSpacing: -1,
+  navHit: {
+    width: 44,
+    height: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  navTitleWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTitle: {
+    fontFamily: fonts.h2,
+    fontSize: 16,
+    color: colors.textPrimary,
+    letterSpacing: 0.5,
+  },
+  navSide: {
+    width: 44,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   headerCreateBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.lime,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.tealPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: colors.lime,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.3,
-        shadowRadius: 14,
+        shadowColor: colors.tealPrimary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
       },
-      android: { elevation: 6 },
+      android: { elevation: 4 },
     }),
+  },
+
+  searchPanel: {
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+  },
+  searchPanelInner: {
+    height: SEARCH_PANEL_HEIGHT,
+    paddingTop: SEARCH_GAP,
+    paddingBottom: SEARCH_GAP,
+    justifyContent: 'center',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: SEARCH_BAR_HEIGHT,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface1,
+    borderWidth: 1,
+    borderColor: colors.surface3,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.textPrimary,
+    paddingVertical: 0,
+    includeFontPadding: false,
+  },
+  searchCloseBtn: {
+    marginLeft: 2,
+    paddingLeft: 6,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.surface3,
   },
 
   // ── Filter bar ──
@@ -405,6 +658,7 @@ const s = StyleSheet.create({
 
   // ── Event Card ──
   card: {
+    position: 'relative',
     backgroundColor: colors.surface,
     borderRadius: 20,
     marginHorizontal: 16,
@@ -420,6 +674,43 @@ const s = StyleSheet.create({
       android: { elevation: 8 },
     }),
   },
+  cardBadgeRow: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  organiserTypeBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  organiserTypeClub: {
+    backgroundColor: 'rgba(0, 229, 195, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 195, 0.45)',
+  },
+  organiserTypePerson: {
+    backgroundColor: 'rgba(123, 77, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 130, 255, 0.5)',
+  },
+  organiserTypeText: {
+    fontFamily: fonts.label,
+    fontSize: 9,
+    letterSpacing: 1.2,
+  },
+  organiserTypeTextClub: {
+    color: colors.tealPrimary,
+  },
+  organiserTypeTextPerson: {
+    color: colors.purpleSoft,
+  },
   coverArea: {
     height: 160,
     position: 'relative',
@@ -429,9 +720,6 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface2,
   },
   liveBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,

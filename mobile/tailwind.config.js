@@ -61,10 +61,9 @@ module.exports = {
         'body-medium': ['Outfit_500Medium'],
         'body-strong': ['Outfit_600SemiBold'],
         'body-bold': ['Outfit_700Bold'],
-        // Space Grotesk — stats / labels / metadata
-        label: ['SpaceGrotesk_700Bold'],
-        stat: ['SpaceGrotesk_600SemiBold'],
-        caption: ['SpaceGrotesk_400Regular'],
+        label: ['Outfit_600SemiBold'],
+        stat: ['Outfit_700Bold'],
+        caption: ['Outfit_400Regular'],
       },
     },
   },

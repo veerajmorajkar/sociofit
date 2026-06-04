@@ -27,44 +27,46 @@ export default function AppHeader({ showActions = true }: AppHeaderProps) {
         style={{ paddingTop: insets.top }}
       >
         <View style={styles.bar}>
-          {showActions ? (
-            <TouchableOpacity
-              onPress={() => router.push('/post/create' as never)}
-              style={styles.iconHit}
-              activeOpacity={0.6}
-              hitSlop={12}
-              accessibilityLabel="Create post"
-              accessibilityRole="button"
-            >
-              <Plus size={20} strokeWidth={1.75} color={colors.textPrimary} />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.spacer} />
-          )}
+          <View style={styles.sideSlot}>
+            {showActions ? (
+              <TouchableOpacity
+                onPress={() => router.push('/post/create' as never)}
+                style={styles.iconHit}
+                activeOpacity={0.6}
+                hitSlop={12}
+                accessibilityLabel="Create post"
+                accessibilityRole="button"
+              >
+                <Plus size={20} strokeWidth={1.75} color={colors.textPrimary} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
-          <MFMLogo />
+          <View style={styles.centerSlot}>
+            <MFMLogo />
+          </View>
 
-          {showActions ? (
-            <TouchableOpacity
-              onPress={() => router.push('/notifications')}
-              style={styles.iconHit}
-              activeOpacity={0.6}
-              hitSlop={12}
-              accessibilityLabel="Notifications"
-              accessibilityRole="button"
-            >
-              <Bell size={20} strokeWidth={1.75} color={colors.textPrimary} />
-              {notificationUnread > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {notificationUnread > 9 ? '9+' : notificationUnread}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.spacer} />
-          )}
+          <View style={[styles.sideSlot, styles.sideSlotRight]}>
+            {showActions ? (
+              <TouchableOpacity
+                onPress={() => router.push('/notifications')}
+                style={styles.iconHit}
+                activeOpacity={0.6}
+                hitSlop={12}
+                accessibilityLabel="Notifications"
+                accessibilityRole="button"
+              >
+                <Bell size={20} strokeWidth={1.75} color={colors.textPrimary} />
+                {notificationUnread > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {notificationUnread > 9 ? '9+' : notificationUnread}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.fadeTail} />
@@ -81,12 +83,23 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 4,
   },
+  sideSlot: {
+    width: HIT,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  sideSlotRight: {
+    alignItems: 'flex-end',
+  },
+  centerSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+    paddingHorizontal: 8,
+  },
   fadeTail: {
     height: 5,
-  },
-  spacer: {
-    width: HIT,
-    height: HIT,
   },
   iconHit: {
     width: HIT,
@@ -108,7 +121,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: {
-    fontFamily: fonts.label,
+    fontFamily: fonts.caption,
     fontSize: 9,
     color: colors.textPrimary,
   },

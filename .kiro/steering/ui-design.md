@@ -1,141 +1,127 @@
-# UI & Design System Steering — FitSocial
-## Design System: "KINEU" (Kinetic + Neumorphism, Dark Mode)
-### Version 2.0 · May 2026
+# UI & Design System Steering — Mumbai Fitness Mafia (SocioFit)
+## Design System: "PURPLE PULSE" (Deep Purple + Electric Teal, Dark Mode)
+### Version 3.0 · Last Updated: June 1, 2026
 
 ---
 
 ## 0. How to Use This Document
 
-This is the authoritative UI steering document for FitSocial. Every screen, component, and interaction must follow the KINEU design system. When in doubt, return here first.
+This is the authoritative UI steering document for Mumbai Fitness Mafia (SocioFit). Every screen, component, and interaction must follow this design system. When in doubt, return here first.
 
-**Primary working mode: Dark Mode only.** Never hardcode colours — always use design token variables.
+**Primary working mode: Dark Mode only.** There is no light mode. Never hardcode colours — always import design tokens from `mobile/constants/theme.ts` (or use the matching NativeWind classes in `mobile/tailwind.config.js`).
 
 ---
 
 ## 1. Design Philosophy
 
-### The KINEU Aesthetic
+A dark, premium, athletic social app. Deep purple is the **brand identity**, electric teal is the **action/energy** colour, and prestige gold is reserved for **elite achievement** moments. Surfaces feel layered and tactile on a near-black violet canvas; gradients add depth and motion to hero areas and event cards.
 
-Every surface feels physically carved from dark material (neumorphic depth), and every headline feels like it's MOVING even when still (kinetic scale + uppercase + aggressive hierarchy). The app should feel alive, tactile, and athletic — like a training app built by a Swiss poster designer.
-
-**Two registers coexist:**
-- **KINETIC** (structural, section-level): Sharp edges, 0px radius, bold uppercase, poster-like
-- **NEUMORPHIC** (component, card level): Soft rounded shapes, dual shadows, tactile depth
-
-The contrast between these two IS the design personality.
-
-### What This App Is NOT
-- Not a generic fintech dark mode
-- Not a music app (no purple neon)
-- Not a gym bro app (no red/black/orange)
-- Not Instagram with a tint
+**Colour language (learn it, never break it):**
+- **Purple = brand / identity / community** → banners, brand text accents, sent chat bubbles, avatars, map pins
+- **Teal = action / energy** → every primary CTA (JOIN, CREATE, BOOK, SIGN UP), active states, success
+- **Gold = elite / achievement** → ELITE badges, leaderboard #1, milestone unlocks (sparse use only)
 
 ---
 
-## 2. Colour System — Charcoal & Lime
+## 2. Colour System — Deep Purple & Electric Teal
 
-### 2.1 Core Brand Colours
+All tokens live in `mobile/constants/theme.ts` (`colors`) and `mobile/tailwind.config.js`.
 
-| Token | Hex | Name | Purpose |
-|---|---|---|---|
-| `--color-lime` | `#D4EA4D` | Electric Lime | Personal CTAs, JOIN, active nav, user story rings, energy |
-| `--color-cream` | `#E8E0D0` | Warm White/Cream | Club accounts, headlines, premium feel |
-| `--color-bg` | `#0E0E0E` | Pure Charcoal | App background — most neutral, timeless |
+### 2.1 Backgrounds & Surfaces
 
-### 2.2 Full Dark Mode Token System
+| Token | Hex | Purpose |
+|---|---|---|
+| `bgPrimary` | `#0E0E14` | Base app background — every screen root (NOT pure black) |
+| `surface1` | `#17172A` | Cards, bottom sheets, modals, drawers |
+| `surface2` | `#1F1F38` | Input fields, nested cards, dropdown backgrounds |
+| `surface3` | `#2A2A48` | Borders, dividers, separators, hover/pressed states |
 
-```css
-/* === SURFACES — Charcoal scale, deepest to lightest === */
---color-bg:              #0E0E0E;   /* App background — pure charcoal canvas        */
---color-surface:         #161616;   /* Cards, post cards, event cards (1 level up)   */
---color-surface-2:       #1E1E1E;   /* Nested cards, modals, bottom sheets           */
---color-surface-3:       #262626;   /* Elevated: tooltips, dropdowns, pressed states */
---color-border:          #2E2E2E;   /* Structural borders, dividers, separators      */
---color-border-strong:   #3A3A3A;   /* Focused input borders, active tab lines       */
+### 2.2 Brand Purple Family
 
-/* === TEXT — Warm tones on charcoal === */
---color-text-1:          #E8E0D0;   /* Headlines, display text, primary body (Warm White) */
---color-text-2:          #B0A898;   /* Body text, descriptions, secondary content    */
---color-text-3:          #706860;   /* Muted labels, timestamps, placeholders        */
---color-text-4:          #4A4440;   /* Disabled text, watermarks, faintest meta      */
---color-text-inverse:    #0E0E0E;   /* Text ON lime or cream backgrounds             */
+| Token | Hex | Purpose |
+|---|---|---|
+| `purpleDeep` | `#3B1F8C` | Tribe banners, section header backgrounds, deep gradient start |
+| `purpleBrand` | `#5B2ECC` | Primary brand — active tab highlight, sent chat bubbles, secondary CTAs |
+| `purpleHero` | `#7B4DFF` | Hero gradients, event accents, trainer CTAs, map pins |
+| `purpleSoft` | `#A882FF` | Secondary text highlights, info chips, link text, subtle labels |
 
-/* === ACCENT — Electric Lime (Personal / Action) === */
---color-lime:            #D4EA4D;   /* PRIMARY — CTAs, JOIN, active nav, your posts  */
---color-lime-dark:       #BEDD1A;   /* Pressed / active state                        */
---color-lime-soft:       #D4EA4D1A; /* 10% opacity — subtle lime tint backgrounds    */
---color-lime-glow:       rgba(212, 234, 77, 0.25); /* Glow halo on lime elements     */
+### 2.3 Electric Teal (Primary Action)
 
-/* === SECONDARY — Sage Green (Community / Clubs / Events) === */
---color-sage:            #52A870;   /* Club cards, event RSVPs, club story rings      */
---color-sage-light:      #9ACFAE;   /* Club text, meta info, going count              */
---color-sage-soft:       #52A8701A; /* 10% opacity — subtle sage tint backgrounds     */
+| Token | Hex | Purpose |
+|---|---|---|
+| `tealPrimary` | `#00E5C3` | PRIMARY CTA — JOIN, CREATE EVENT, BOOK SESSION, SIGN UP |
+| `tealMid` | `#00BFA5` | Map pins (events), active states, progress fills, online indicator |
+| `tealDark` | `#007A6A` | Teal-tinted card backgrounds, pressed state of teal buttons |
 
-/* === CREAM — Warm White (Premium / Headlines) === */
---color-cream:           #E8E0D0;   /* Club headlines, premium badges, warm accents   */
---color-cream-soft:      #E8E0D01A; /* 10% opacity — subtle cream tint                */
+### 2.4 Prestige Gold (sparse — elite & achievement ONLY)
 
-/* === SEMANTIC — Only for meaning, never decoration === */
---color-success:         #22C55E;   /* RSVP confirmed, payment OK                    */
---color-success-bg:      rgba(34, 197, 94, 0.12);
---color-warning:         #F59E0B;   /* Event almost full, expiry warning              */
---color-warning-bg:      rgba(245, 158, 11, 0.12);
---color-error:           #EF4444;   /* Failed action, cancelled event                 */
---color-error-bg:        rgba(239, 68, 68, 0.12);
---color-info:            #3B82F6;   /* New follower, announcement                     */
---color-info-bg:         rgba(59, 130, 246, 0.12);
---color-premium:         #A855F7;   /* Verified badge, paid event tag                 */
---color-premium-bg:      rgba(168, 85, 247, 0.12);
---color-live:            #FF4444;   /* Live event pulsing indicator                   */
+| Token | Hex | Purpose |
+|---|---|---|
+| `gold` | `#C9A84C` | ELITE tribe badges, Leaderboard #1 rank, achievement medals |
+| `goldLight` | `#E8C96A` | Gold text on dark surfaces, shimmer text on milestone screens |
+| `goldGlow` | `#F5E0A0` | Subtle gold background tint on achievement-unlocked screens only |
+
+### 2.5 Typography Colours
+
+| Token | Hex | Purpose |
+|---|---|---|
+| `textPrimary` | `#FFFFFF` | Headlines, usernames, event titles, screen titles |
+| `textSecondary` | `#C4BEFF` | Body copy, descriptions, captions, card subtitles |
+| `textMuted` | `#7A74A8` | Timestamps, metadata, placeholders, inactive labels, word counts |
+| `textDisabled` | `#3A3A5A` | Disabled state labels only |
+| `onTeal` | `#001A14` | Near-black text drawn on teal CTAs |
+| `onGold` | `#1A0E00` | Near-black text drawn on gold badges |
+
+### 2.6 Semantic / Functional
+
+| Token | Hex | Purpose |
+|---|---|---|
+| `success` | `#00E5C3` | Joined confirmation, completed goals, active event badge |
+| `error` | `#FF4D6D` | Validation errors, leave/delete actions, failed states |
+| `warning` | `#F5A623` | Streak at risk, expiring event, incomplete form nudge |
+| `info` | `#A882FF` | Tips, informational tooltips, soft nudges |
+
+### 2.7 Gradient Definitions (`gradients` in theme.ts)
+
+```
+gradient-hero:        135deg  #3B1F8C → #7B4DFF → #00E5C3
+gradient-brand:       135deg  #5B2ECC → #7B4DFF
+gradient-teal:        135deg  #007A6A → #00E5C3
+gradient-fab:         135deg  #5B2ECC → #00E5C3
+gradient-story-ring:  135deg  #7B4DFF → #00E5C3
+
+# Event card category gradients (apply by activity type):
+gradient-event-running:     135deg  #1A0A3A → #5B2ECC
+gradient-event-cycling:     135deg  #0A1A3A → #3B6FCC
+gradient-event-yoga:        135deg  #0A2A2A → #00BFA5
+gradient-event-competitive: 135deg  #1A0020 → #7B2FBE
+gradient-event-social:      135deg  #1A1A0A → #7A5C2E
+gradient-event-outdoor:     135deg  #0A1A0A → #2D6A4F
 ```
 
-### 2.3 Colour Usage Rules (STRICT)
+Use the `eventGradient(categorySlug)` helper from `theme.ts` to resolve an event's gradient from its category.
 
-1. **Lime (#D4EA4D) = YOU / PERSONAL / ACTION** → Join, Post, Your Profile, Your Story ring, active nav, primary CTAs
-2. **Sage (#52A870) = COMMUNITY / CLUBS / EVENTS** → Club cards, Event RSVPs, Club story rings, club badges
-3. **Cream (#E8E0D0) = PREMIUM / HEADLINES** → Display text, club names, warm accents
-4. **Never swap lime and sage.** The user learns this language subconsciously.
-5. **Text on lime background**: ALWAYS use `--color-text-inverse` (#0E0E0E)
-6. **No pure white (#FFFFFF) or pure black (#000000)** — use the token scale
-7. **No gradients on backgrounds** — solid surfaces only
-8. **No Tailwind default shadows** — use custom neumorphic shadow tokens only
+### 2.8 Colour Usage Rules (STRICT)
+
+1. **Teal = action.** Every primary CTA is `tealPrimary` with `onTeal` (#001A14) label text.
+2. **Purple = brand/community.** Banners, sent chat bubbles, avatars, map pins, secondary CTAs.
+3. **Gold is sacred.** Only for elite tiers, #1 rank, and achievement unlocks. Never decorative.
+4. Text on teal is ALWAYS `onTeal`; text on gold is ALWAYS `onGold`.
+5. No pure black (`#000000`) backgrounds — the base is `#0E0E14`.
+6. Never hardcode hex — import tokens. Shadows may use black rgba per Section 4.
 
 ---
 
-## 3. Shadow System — Neumorphic Depth
+## 3. Shadow & Elevation System
 
-Light source: top-left. Always use rgba() shadows, never opaque hex.
+Light source: straight-down. Use the presets in `theme.ts` (`shadows`).
 
-```css
-/* Extruded — default state for cards, buttons, avatars */
---shadow-out:
-  6px 6px 14px rgba(0,0,0,0.55),
-  -4px -4px 10px rgba(255,255,255,0.03);
-
-/* Lifted — hover state */
---shadow-out-hover:
-  9px 9px 18px rgba(0,0,0,0.65),
-  -6px -6px 14px rgba(255,255,255,0.04);
-
-/* Pressed — active/inset state */
---shadow-in:
-  inset 5px 5px 12px rgba(0,0,0,0.5),
-  inset -4px -4px 8px rgba(255,255,255,0.02);
-
-/* Deep carved — search inputs, stat wells, grid thumbnails */
---shadow-in-deep:
-  inset 8px 8px 18px rgba(0,0,0,0.6),
-  inset -5px -5px 12px rgba(255,255,255,0.02);
-
-/* Lime glow — primary CTA, active nav, lime badges */
---shadow-lime:
-  0 0 20px rgba(212,234,77,0.25),
-  6px 6px 14px rgba(0,0,0,0.55);
-
-/* Sage glow — club elements */
---shadow-sage:
-  0 0 16px rgba(82,168,112,0.20),
-  6px 6px 14px rgba(0,0,0,0.55);
+```
+shadow-sm:     0 2px 8px  rgba(0,0,0,0.30)
+shadow-md:     0 4px 20px rgba(0,0,0,0.40)   // default for cards
+shadow-lg:     0 8px 40px rgba(0,0,0,0.50)   // large modals / sheets
+shadow-teal:   0 4px 20px rgba(0,229,195,0.20)  // active teal CTAs
+shadow-purple: 0 4px 20px rgba(123,77,255,0.25) // purple CTAs / hero elements
 ```
 
 ---
@@ -144,28 +130,26 @@ Light source: top-left. Always use rgba() shadows, never opaque hex.
 
 ### Font Stack
 ```
-Display / Headings:  'Space Grotesk'  — weights: 400, 500, 700
-Body / UI:           'DM Sans'        — weights: 400, 500, 700
+Primary (default for all text):  Outfit         — weights 300, 400, 500, 600, 700, 800, 900
+Secondary (numeric/labels/meta): Space Grotesk  — weights 400, 500, 600, 700
 ```
 
-### Type Scale (Kinetic)
-```css
---text-hero:    clamp(2.5rem, 8vw, 6rem)    /* uppercase, 700, tracking -1px    */
---text-section: clamp(1.8rem, 5vw, 3.5rem)  /* uppercase, 700, tracking -0.5px  */
---text-xl:      20px                         /* uppercase, 700, tracking -0.2px  */
---text-base:    14-16px                      /* normal case, 400-500             */
---text-label:   10-12px                      /* uppercase, 700, tracking +1.5px  */
---text-stat:    clamp(2rem, 6vw, 5rem)       /* uppercase, 700, tracking -2px    */
-```
+Outfit is the default font on every text element. Use **Space Grotesk ONLY** for stat values, numeric data, timestamps, metadata labels, and chip/tag/category labels. Fonts are loaded via `@expo-google-fonts/outfit` and `@expo-google-fonts/space-grotesk` in `app/_layout.tsx`. Reference families via the `fonts` token (e.g. `fonts.h1`, `fonts.body`, `fonts.label`, `fonts.stat`, `fonts.caption`).
 
-### Type Rules (NON-NEGOTIABLE)
-- ALL headings, buttons, labels, nav items → **UPPERCASE**
-- Body text, descriptions, bio → normal case
-- Display text → negative letter-spacing (tracking-tighter)
-- Small labels → wide letter-spacing (tracking-widest)
-- Heading line-height: 0.9–1.0 (tight, poster-like)
-- NEVER use serif fonts
-- NEVER use sentence case for headings
+### Type Scale Tokens
+
+| Token | Family | Weight | Size | Line / Tracking | Colour |
+|---|---|---|---|---|---|
+| `display` | Outfit | 900 | 32–40px | 1.1 / -0.02em | textPrimary (gradient-hero fill on hero/onboarding) |
+| `h1` | Outfit | 700 | 24px | 1.2 / -0.01em | textPrimary |
+| `h2` | Outfit | 600 | 18px | 1.3 | textPrimary |
+| `h3` | Outfit | 600 | 15px | 1.4 | textSecondary |
+| `body` | Outfit | 400 | 14–15px | 1.6 | textSecondary |
+| `bodyStrong` | Outfit | 600 | 14px | — | textPrimary |
+| `label` | Space Grotesk | 700 | 11–12px | +0.10–0.14em, UPPERCASE | textMuted |
+| `stat` | Space Grotesk | 600 | 14–16px | -0.01em | tealPrimary (key metrics) or textPrimary |
+| `caption` | Space Grotesk | 400 | 12px | 1.5 | textMuted |
+| `button` | Outfit | 700 | 15px | +0.01em | (per button) |
 
 ---
 
@@ -173,116 +157,99 @@ Body / UI:           'DM Sans'        — weights: 400, 500, 700
 
 Base unit: 4px. Every margin, padding, gap must be a multiple of 4.
 
-```css
---space-1:  4px;    --space-2:  8px;    --space-3:  12px;
---space-4:  16px;   --space-5:  20px;   --space-6:  24px;
---space-8:  32px;   --space-10: 40px;   --space-12: 48px;
---space-16: 64px;
+```
+4, 8, 12, 16, 20, 24, 32, 40, 48, 64px
 ```
 
-Screen edge padding: 16px. Card internal padding: 24px. List gap: 12px.
+Screen edge padding: 16px (mobile) / 24px (tablet). Card internal padding: 16px (mobile) / 20px (tablet). List gap: 12px.
 
 ---
 
-## 6. Shape Language
+## 6. Shape Language — Border Radius
 
-### KINETIC Register (structural, section-level)
-- Border radius: **0px** (sharp, brutalist)
-- Border: 2px solid --color-border on section dividers
-- Used for: section containers, stat blocks, hero areas, marquee strips, bottom nav background
-
-### NEUMORPHIC Register (component, card level)
-- Border radius: **16px** (buttons, chips, inputs) or **20px** (cards) or **50%** (avatars)
-- No visible border — shadows define edges
-- Used for: post cards, event cards, buttons, story rings, avatars, search inputs, filter chips
-
-**RULE: Outer structure is sharp and kinetic. Inner components are soft and tactile.**
+```
+xs:   6px   chips, tags, small badges
+sm:   8px   small buttons, event JOIN buttons
+md:   12px  buttons, inputs, small cards
+lg:   16px  feed cards, event cards, modals
+xl:   24px  bottom sheets, large modals (rounded top corners)
+full: 9999  pills, story rings, FAB
+```
 
 ---
 
 ## 7. Component Specifications
 
-### 7.1 Bottom Navigation (Floating Pill)
-- Background: --color-surface-2, border-radius 50% (capsule)
-- Nav items: neumorphic containers
-- Active item: lime circle highlight, icon inverts to --color-text-inverse
-- Inactive: --color-text-3
-- Smooth spring animation on tab switch (circle slides)
-- Tabs: Home, Events, Search, Post, Profile
-- Messages accessed from top-right header icon
+### 7.1 Navigation
+- App root background → `bgPrimary`
+- Bottom nav (floating pill) → `surface2`; active tab circle → `tealPrimary` with `onTeal` icon; inactive icons → `textMuted`
+- FAB / centre action → `gradient-fab`, circular, white "+", teal-tinted elevation `rgba(0,229,195,0.25)`
+- Top bar/header → `bgPrimary` (gradient fade), no border unless scrolled
+- Brand text → `textPrimary` white with a `tealPrimary` accent dot
 
 ### 7.2 Buttons
-**Primary (Lime):**
-- Background: --color-lime, text: --color-text-inverse
-- Shadow: --shadow-lime
-- Pressed: --color-lime-dark + --shadow-in
-- Border-radius: 16px, uppercase, Space Grotesk 700
+- **Primary** (JOIN, BOOK, CREATE, SIGN UP, SUBMIT): `tealPrimary` bg, `onTeal` text, radius `md` (12px), `button` font, 48–52px tall, `shadow-teal`
+- **Secondary** (FOLLOW, SAVE, SHARE): `surface2` bg, `purpleSoft` text, 1px `purpleBrand` border, radius `md`
+- **Destructive** (LEAVE, DELETE, CANCEL): `error` bg, white text
+- **Trainer/Coach CTA** (BOOK SESSION, VIEW PROFILE): `purpleHero` bg, white text
+- **Disabled**: `surface3` bg, `textDisabled` text, no shadow
+- **Ghost/text**: transparent, `purpleSoft` text, underline on press
 
-**Secondary (Sage):**
-- Background: --color-sage, text: white
-- Shadow: --shadow-sage
-- Used for club/event actions
+### 7.3 Cards & Feed
+- Card bg → `surface1`; border 1px `surface3`; radius `lg` (16px); `shadow-md`
+- Post avatar → `gradient-brand` fill inside a story ring (`purpleHero` / `gradient-story-ring` 2.5px)
+- Username → `textPrimary` `bodyStrong`; timestamp/meta → `textMuted` `caption`
+- Caption → `textSecondary` `body`
+- Action icons → `textMuted` default, `tealPrimary` active; like/heart active → `error`
 
-**Ghost:**
-- Background: transparent, border: 1.5px solid --color-border-strong
-- Text: --color-text-2
+### 7.4 Event Cards
+- Cover → `gradient-event-[type]` by category
+- ACTIVE badge → `tealPrimary` bg, `onTeal` text; ELITE badge → `gold` bg, `onGold` text
+- Title → `textPrimary` `h2`; meta → `textMuted` `caption`
+- JOIN button → `tealPrimary`, `onTeal` label, radius `sm`; attendee count → `purpleSoft` `caption`
 
-### 7.3 Post Card
-- Background: --color-surface-2, border-radius: 16px, shadow: --shadow-out
-- Header: avatar (rounded-full, shadow-out, lime ring for personal, sage ring for club)
-- Username: uppercase, 700, --color-text-1
-- Timestamp: --color-text-3, 10px
-- Image area: shadow-in (carved), border-radius 10px
-- CTA: lime background, --color-text-inverse, shadow-lime
+### 7.5 Map
+- Dark map tiles enforced
+- Event pins → `purpleHero` (shadow `rgba(123,77,255,0.5)`); user pin → `tealPrimary` (shadow `rgba(0,229,195,0.5)`)
+- Create Event overlay button → `tealPrimary`, `onTeal` text
 
-### 7.4 Event Card
-- Same structure as post card but sage accent
-- Club avatar: border-radius 8px (not circle — clubs are squares)
-- RSVP button: sage background
-- Going count: --color-sage-light
-- LIVE badge: lime background, --color-text-inverse
+### 7.6 Leaderboard
+- #1 → `gold` bg / `onGold`; #2 → `purpleSoft` bg / white; #3 → `purpleHero` bg / white; rest → `surface2` / `textSecondary`
+- Rank number → `stat` (Space Grotesk 700); name → `bodyStrong`; score → `tealPrimary` `stat`
 
-### 7.5 Story Rings
-- Personal (posted today): lime ring, shadow-lime glow pulse
-- Club (active event): sage ring
-- Default: --color-surface-2 ring, --color-text-3
+### 7.7 Profile
+- Background → `bgPrimary`; hero header block → `gradient-hero` with white text
+- Avatar ring → `gradient-story-ring` / `tealPrimary`
+- Stats → `tealPrimary` value (`stat`), `textMuted` label (`label`)
+- Primary CTA → `tealPrimary`; secondary → `surface2`
+- Achievements → `gold` (elite earned), `purpleHero` (standard), `surface3` (locked)
 
-### 7.6 Search Input
-- Background: --color-surface, shadow-in-deep (carved)
-- Border-radius: 14px
-- Font: Space Grotesk, uppercase, tracking 0.5px
-- Focus: shadow-in-deep + lime bottom-border highlight
+### 7.8 Chat / Event Chatroom
+- Background → `bgPrimary`
+- Sent bubble → `purpleBrand`, white text, radius 16/16/4/16
+- Received bubble → `surface2`, `textSecondary`, radius 16/16/16/4
+- Timestamp → `textMuted` `caption`; input bar → `surface1` bg, `surface3` border, `tealPrimary` send
 
-### 7.7 Stat Wells (Profile)
-- Background: --color-surface, shadow-in-deep
-- Border-radius: 12px
-- Number: --color-lime, weight 700
-- Label: --color-text-3, uppercase, 8px
+### 7.9 Forms & Inputs
+- Input bg → `surface2`; border → `surface3`; focused → `purpleHero` + `rgba(123,77,255,0.2)` glow
+- Error border → `error`; success border → `success`
+- Text → `textPrimary`; placeholder → `textMuted`; label → `purpleSoft` `label`
+- Search bar → `surface2`, `textMuted` icon, radius `md`
 
-### 7.8 Avatar
-- Sizes: 28px (compact), 38px (post header), 56px (profile), 64px (story)
-- Personal: rounded-full, lime ring border
-- Club: border-radius 8px, sage ring border
-- Fallback: initials, Space Grotesk 700, --color-surface-3 bg
-- Shadow: --shadow-out
+### 7.10 Notifications / Toasts
+- Success → `tealDark` bg, `tealPrimary` left border, white text
+- Error → `#2A0A10` bg, `error` left border, white text
+- Warning → `#2A1A00` bg, `warning` left border, white text
+- Badge/dot → `tealPrimary` bg, `onTeal` text
 
 ---
 
 ## 8. Motion & Animation
 
-### Neumorphic Micro-interactions
-- Card hover: translateY(-2px) + shadow-out-hover, 250ms ease-out
-- Button press: translateY(1px) + shadow-in, 100ms
-- Input focus: shadow-in → shadow-in-deep + lime border
-- Story ring: shadow-lime glow pulse (2s ease-in-out infinite)
-
-### Tab Bar Animation
-- Lime circle slides between tabs: spring(damping: 28, stiffness: 120)
-- Gentle scale breathe on selection: 0.9 → 1.0
-
-### General Rules
+- Tab circle slides between tabs: spring(damping 26, stiffness 130), gentle scale breathe 0.85 → 1.0
+- Card press: subtle scale/translate, 100–250ms
 - No instant show/hide — everything animates (min 150ms)
-- Respect prefers-reduced-motion
+- Respect `prefers-reduced-motion`
 - Easing: cubic-bezier(0.16, 1, 0.3, 1)
 
 ---
@@ -290,60 +257,53 @@ Screen edge padding: 16px. Card internal padding: 24px. List gap: 12px.
 ## 9. Navigation Architecture
 
 ```
-AuthStack: Splash → Onboarding → AccountType → SignUp/Login → ProfileSetup
+AuthStack: Onboarding → SignUp/Login
 MainStack:
   BottomTabNavigator (Floating Pill):
-    Home → Events → Search → Post → Profile
-  Header icons: Messages (top-right), Notifications (top-right)
-  Global modals: CreatePost, ImageViewer, PaymentSheet
+    Home → Search → Post(FAB) → Events → Profile
+  Header icons: Notifications (top-left), Messages (top-right)
+  Global routes: messages, notifications, leaderboard, event/[id], profile/[id], chat/[id], post/create (modal)
 ```
 
 ---
 
 ## 10. Responsive & Adaptive Rules
 
-- No fixed widths on content containers
-- No hardcoded heights on scrollable content
-- Screen edge padding: always 16px
-- One primary lime CTA per screen max
-- Progressive disclosure on long content
-- paddingBottom: 100 on scrollable screens (nav clearance)
-- Touch targets: minimum 44x44px
-- SafeAreaView on all screens
-- KeyboardAvoidingView on input screens
+- Mobile-first. Font sizes use clamp()/responsive units on any web/PWA layer.
+- Touch targets: minimum 44×44px
+- Bottom navigation height: 56px + safe-area-inset-bottom
+- Card padding: 16px mobile / 20px tablet; screen edge padding: 16px mobile / 24px tablet
+- Event card horizontal scroll: snap scrolling, 12px gap, first card 16px left offset
+- Modals / bottom sheets: max-height 90vh, rounded top corners `xl` (24px)
+- No fixed widths on content containers; `SafeAreaView` on all screens; `KeyboardAvoidingView` on input screens
+- `paddingBottom` clearance on scrollable screens so content clears the floating nav
 
 ---
 
 ## 11. Anti-Patterns — NEVER DO THESE
 
-- ✗ Pure black (#000000) or pure white (#FFFFFF)
-- ✗ Gradients on backgrounds
-- ✗ Tailwind default shadows (shadow-sm, shadow-md)
-- ✗ Border-radius above 20px on cards
-- ✗ Sentence case for headings or buttons
-- ✗ Lime for club content or sage for personal content
-- ✗ Flat buttons without shadow depth
-- ✗ Serif fonts
-- ✗ Multiple accent colours beyond lime + sage
+- ✗ Pure black (`#000000`) or pure white backgrounds
+- ✗ Hardcoded hex/rgba one-offs — always use tokens
+- ✗ Teal for branding/community or purple for primary CTAs (keep the colour language)
+- ✗ Gold used decoratively (it is elite/achievement only)
+- ✗ Light text on light, or low-contrast text on gradients
+- ✗ Serif fonts; using Space Grotesk for body copy
+- ✗ Introducing a light mode unless explicitly requested
 
 ---
 
 ## 12. Implementation Checklist
 
 - [ ] Use design tokens from Section 2, never hardcode hex
-- [ ] Use neumorphic shadow tokens from Section 3
-- [ ] Space Grotesk for headings, DM Sans for body
-- [ ] ALL headings and buttons UPPERCASE
-- [ ] Lime = personal/action, Sage = community/clubs
-- [ ] Text on lime is ALWAYS #0E0E0E
-- [ ] Icons from Lucide only
-- [ ] Touch targets minimum 44x44px
-- [ ] SafeAreaView on all screens
-- [ ] Shadow-out on all cards and buttons (no flat elements)
-- [ ] Shadow-in on pressed states and input wells
+- [ ] Use shadow/elevation tokens from Section 3
+- [ ] Outfit for everything; Space Grotesk only for stats/labels/metadata
+- [ ] Teal = action, Purple = brand/community, Gold = elite (sparse)
+- [ ] Text on teal is `onTeal`; text on gold is `onGold`
+- [ ] Icons from Lucide only — change colour, never the icon
+- [ ] Touch targets minimum 44×44px
+- [ ] `SafeAreaView` on all screens; nav clearance on scroll views
 
 ---
 
-*FitSocial KINEU Design System · Version 2.0 · May 2026*
-*Charcoal canvas. Lime is personal energy. Sage is community. Cream is premium.*
-*Every surface has depth. Every heading screams.*
+*SocioFit / Mumbai Fitness Mafia "PURPLE PULSE" Design System · Version 3.0 · June 2026*
+*Deep violet canvas. Teal is action. Purple is identity. Gold is earned.*

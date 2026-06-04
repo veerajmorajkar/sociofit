@@ -4,7 +4,7 @@ import { Platform, type ViewStyle } from 'react-native';
  * Mumbai Fitness Mafia (SocioFit) — Design Tokens
  * Source: .kiro/steering/ui-design.md
  * Dark-mode-first. Deep Purple brand + Electric Teal action + Prestige Gold accents.
- * Typography: Outfit (primary) + Space Grotesk (stats / labels / metadata).
+ * Typography: Outfit (primary UI type throughout).
  *
  * NOTE: Never hardcode hex values in components — always import from here.
  */
@@ -391,7 +391,7 @@ export const radius = {
 
 /**
  * Font family names — registered in app/_layout.tsx via expo-google-fonts.
- * Outfit = primary (default). Space Grotesk = stats / labels / metadata only.
+ * Outfit = primary (default). Register all weights in app/_layout.tsx via useFonts.
  */
 export const fonts = {
   // ── Outfit (primary) ──
@@ -411,11 +411,11 @@ export const fonts = {
   extrabold: 'Outfit_800ExtraBold',
   black: 'Outfit_900Black',
 
-  // ── Space Grotesk (secondary — numeric / labels / metadata) ──
-  label: 'SpaceGrotesk_700Bold',
-  stat: 'SpaceGrotesk_600SemiBold',
-  caption: 'SpaceGrotesk_400Regular',
-  mono: 'SpaceGrotesk_500Medium',
+  // ── Secondary text styles (Outfit — matches primary UI type) ──
+  label: 'Outfit_600SemiBold',
+  stat: 'Outfit_700Bold',
+  caption: 'Outfit_400Regular',
+  mono: 'Outfit_500Medium',
 
   // ── Legacy aliases (mapped to new system) ──
   heading: 'Outfit_700Bold',

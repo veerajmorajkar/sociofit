@@ -100,18 +100,20 @@ function NotificationsHeader({
   return (
     <SafeAreaView edges={['top']} style={s.navSafe}>
       <View style={s.navBar}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={12}
-          accessibilityLabel="Go back"
-          style={s.backHit}
-        >
-          <ChevronLeft size={24} strokeWidth={1.75} color={colors.textPrimary} />
-        </Pressable>
+        <View style={s.navSide}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            accessibilityLabel="Go back"
+            style={s.backHit}
+          >
+            <ChevronLeft size={24} strokeWidth={1.75} color={colors.textPrimary} />
+          </Pressable>
+        </View>
         <View style={s.navTitleWrap}>
           <Text style={s.navTitle}>NOTIFICATIONS</Text>
         </View>
-        <View style={s.navSide}>
+        <View style={[s.navSide, s.navSideRight]}>
           {unreadCount > 0 ? (
             <Pressable onPress={onMarkAll} disabled={markingAll} hitSlop={8} style={s.markAllHit}>
               <Text style={[s.markAllAction, markingAll && s.markAllActionDisabled]}>
@@ -222,11 +224,20 @@ const s = StyleSheet.create({
     paddingBottom: 10,
     minHeight: 44,
   },
-  backHit: {
-    width: 44,
-    height: 44,
+  navSide: {
+    width: 72,
     alignItems: 'flex-start',
     justifyContent: 'center',
+  },
+  navSideRight: {
+    alignItems: 'flex-end',
+  },
+  backHit: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -8,
   },
   navTitleWrap: {
     flex: 1,
@@ -238,11 +249,7 @@ const s = StyleSheet.create({
     fontSize: 16,
     color: colors.textPrimary,
     letterSpacing: 0.5,
-  },
-  navSide: {
-    width: 72,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    textAlign: 'center',
   },
   markAllHit: {
     paddingVertical: 6,

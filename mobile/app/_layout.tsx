@@ -6,11 +6,20 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import {
+  Outfit_300Light,
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_600SemiBold,
+  Outfit_700Bold,
+  Outfit_800ExtraBold,
+  Outfit_900Black,
+} from '@expo-google-fonts/outfit';
+import {
   SpaceGrotesk_400Regular,
   SpaceGrotesk_500Medium,
+  SpaceGrotesk_600SemiBold,
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
-import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { colors } from '@/constants/theme';
@@ -28,12 +37,17 @@ function AppContent() {
   const loadStoredAuth = useAuthStore((state) => state.loadStoredAuth);
 
   const [fontsLoaded] = useFonts({
-    'SpaceGrotesk-Regular': SpaceGrotesk_400Regular,
-    'SpaceGrotesk-Medium': SpaceGrotesk_500Medium,
-    'SpaceGrotesk-Bold': SpaceGrotesk_700Bold,
-    'DMSans-Regular': DMSans_400Regular,
-    'DMSans-Medium': DMSans_500Medium,
-    'DMSans-Bold': DMSans_700Bold,
+    Outfit_300Light,
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
+    Outfit_800ExtraBold,
+    Outfit_900Black,
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_500Medium,
+    SpaceGrotesk_600SemiBold,
+    SpaceGrotesk_700Bold,
   });
 
   useEffect(() => {
@@ -79,7 +93,7 @@ function AppContent() {
           title: 'MESSAGES',
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.text1,
-          headerTitleStyle: { fontFamily: 'SpaceGrotesk-Bold' },
+          headerTitleStyle: { fontFamily: 'Outfit_700Bold' },
         }}
       />
       <Stack.Screen
@@ -91,6 +105,7 @@ function AppContent() {
           headerTintColor: colors.text1,
         }}
       />
+      <Stack.Screen name="event/create" options={{ headerShown: false }} />
       <Stack.Screen name="profile/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile/edit" options={{ headerShown: false }} />
       <Stack.Screen

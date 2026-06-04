@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
-import { ArrowLeft, Camera, Link as LinkIcon, X } from 'lucide-react-native';
+import { ChevronLeft, Camera, Link as LinkIcon, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMyProfile, useUpdateProfile } from '@/hooks/useProfile';
 import { uploadFile } from '@/services/upload.service';
@@ -128,22 +128,34 @@ export default function EditProfileScreen() {
         >
           <SafeAreaView edges={['top']}>
             <View style={s.topRow}>
-              <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
-                <ArrowLeft size={20} strokeWidth={2} color="rgba(255,255,255,0.9)" />
-              </TouchableOpacity>
-              <Text style={s.screenTitle}>EDIT PROFILE</Text>
-              <TouchableOpacity
-                onPress={onSave}
-                style={[s.saveBtn, isPending && { opacity: 0.5 }]}
-                disabled={isPending || uploadingAvatar}
-                activeOpacity={0.7}
-              >
-                {isPending ? (
-                  <ActivityIndicator size="small" color={colors.onTeal} />
-                ) : (
-                  <Text style={s.saveBtnText}>SAVE</Text>
-                )}
-              </TouchableOpacity>
+              <View style={s.navSide}>
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  style={s.backBtn}
+                  activeOpacity={0.65}
+                  accessibilityLabel="Go back"
+                  accessibilityRole="button"
+                >
+                  <ChevronLeft size={24} strokeWidth={2} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <View style={s.navTitleWrap}>
+                <Text style={s.screenTitle}>EDIT PROFILE</Text>
+              </View>
+              <View style={[s.navSide, s.navSideRight]}>
+                <TouchableOpacity
+                  onPress={onSave}
+                  style={[s.saveBtn, isPending && { opacity: 0.5 }]}
+                  disabled={isPending || uploadingAvatar}
+                  activeOpacity={0.7}
+                >
+                  {isPending ? (
+                    <ActivityIndicator size="small" color={colors.onTeal} />
+                  ) : (
+                    <Text style={s.saveBtnText}>SAVE</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Avatar */}
@@ -282,24 +294,35 @@ const s = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    minHeight: 44,
     marginBottom: 24,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  navSide: {
+    width: 72,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  navSideRight: {
+    alignItems: 'flex-end',
+  },
+  navTitleWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -8,
   },
   screenTitle: {
-    fontFamily: fonts.label,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 2,
+    fontFamily: fonts.h2,
+    fontSize: 16,
+    color: colors.textPrimary,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   saveBtn: {
     paddingHorizontal: 18,
