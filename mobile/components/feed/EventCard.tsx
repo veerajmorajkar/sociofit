@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors, fonts, radius, shadows, gradients } from '@/constants/theme';
 
 export default function EventCard({
   clubName,
@@ -8,6 +10,7 @@ export default function EventCard({
   goingCount,
   avatarInitial,
   isClub = true,
+  category: _category,
   onRsvp,
   onPress,
 }: {
@@ -17,25 +20,29 @@ export default function EventCard({
   goingCount: number;
   avatarInitial: string;
   isClub?: boolean;
+  category?: string;
   onRsvp?: () => void;
   onPress?: () => void;
 }) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={s.card}>
-
       {/* ── Header ── */}
       <View style={s.header}>
         {/* Avatar */}
-        <View style={[s.avatar, !isClub && s.avatarRound]}>
+        <View style={[s.avatar, s.avatarRound]}>
           <Text style={s.avatarLetter}>{avatarInitial}</Text>
         </View>
 
         {/* Name + meta */}
         <View style={s.info}>
           <View style={s.nameRow}>
-            <Text style={s.name} numberOfLines={1}>{clubName.toUpperCase()}</Text>
+            <Text style={s.name} numberOfLines={1}>
+              {clubName.toUpperCase()}
+            </Text>
           </View>
-          <Text style={s.meta}>{time} · {location}</Text>
+          <Text style={s.meta}>
+            {time} · {location}
+          </Text>
         </View>
 
         {/* EVENT tag */}
@@ -44,48 +51,37 @@ export default function EventCard({
         </View>
       </View>
 
-      {/* ── Media well ── */}
-      <View style={s.media} />
+      {/* ── Media well — category gradient ── */}
+      <LinearGradient
+        colors={gradients.eventRunning}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.media}
+      />
 
       {/* ── Footer ── */}
       <View style={s.footer}>
         <Text style={s.going}>{goingCount} going</Text>
 
-        {/* JOIN — kinetic: lime block, sharp corners, bold */}
-        <TouchableOpacity
-          onPress={onRsvp}
-          activeOpacity={0.75}
-          style={s.joinBtn}
-        >
+        {/* JOIN — teal primary CTA */}
+        <TouchableOpacity onPress={onRsvp} activeOpacity={0.85} style={s.joinBtn}>
           <Text style={s.joinText}>JOIN →</Text>
         </TouchableOpacity>
       </View>
-
     </TouchableOpacity>
   );
 }
 
-const LIME = '#D4EA4D';
-const LIME_DARK = '#BEDD1A';
-const BG = '#0E0E0E';
-const SURFACE = '#161616';
-const SURFACE2 = '#1E1E1E';
-const SURFACE3 = '#262626';
-const TEXT1 = '#E8E0D0';
-const TEXT3 = '#706860';
-
 const s = StyleSheet.create({
   card: {
-    backgroundColor: SURFACE,
-    borderRadius: 20,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
     padding: 16,
     marginHorizontal: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.surface3,
+    ...shadows.md,
   },
 
   // Header
@@ -98,18 +94,18 @@ const s = StyleSheet.create({
   avatar: {
     width: 42,
     height: 42,
-    borderRadius: 10,
-    backgroundColor: SURFACE3,
+    borderRadius: 21,
+    backgroundColor: colors.surface2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: LIME,
+    borderColor: colors.purpleHero,
   },
   avatarRound: { borderRadius: 21 },
   avatarLetter: {
-    fontFamily: 'SpaceGrotesk-Bold',
+    fontFamily: fonts.h2,
     fontSize: 16,
-    color: LIME,
+    color: colors.purpleSoft,
   },
   info: { flex: 1 },
   nameRow: {
@@ -119,38 +115,38 @@ const s = StyleSheet.create({
     flexShrink: 1,
   },
   name: {
-    fontFamily: 'SpaceGrotesk-Bold',
+    fontFamily: fonts.h2,
     fontSize: 14,
-    color: TEXT1,
-    letterSpacing: 0.5,
+    color: colors.textPrimary,
+    letterSpacing: 0.3,
     flexShrink: 1,
   },
   meta: {
-    fontFamily: 'DMSans-Regular',
-    fontSize: 11,
-    color: TEXT3,
+    fontFamily: fonts.caption,
+    fontSize: 12,
+    color: colors.textMuted,
     marginTop: 2,
   },
   eventTag: {
-    backgroundColor: 'rgba(212,234,77,0.10)',
-    borderRadius: 6,
+    backgroundColor: 'rgba(168,130,255,0.12)',
+    borderRadius: radius.xs,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(212,234,77,0.18)',
+    borderColor: 'rgba(168,130,255,0.22)',
   },
   eventTagText: {
-    fontFamily: 'SpaceGrotesk-Bold',
+    fontFamily: fonts.label,
     fontSize: 9,
-    color: LIME,
+    color: colors.purpleSoft,
     letterSpacing: 1.5,
   },
 
   // Media
   media: {
     height: 180,
-    borderRadius: 12,
-    backgroundColor: SURFACE2,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
     marginBottom: 14,
   },
 
@@ -161,24 +157,25 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   going: {
-    fontFamily: 'DMSans-Medium',
+    fontFamily: fonts.caption,
     fontSize: 13,
-    color: TEXT3,
+    color: colors.purpleSoft,
   },
 
-  // JOIN button — kinetic: sharp, lime block, proportional
+  // JOIN button — teal primary CTA
   joinBtn: {
-    backgroundColor: LIME,
-    paddingHorizontal: 16,
+    backgroundColor: colors.tealPrimary,
+    paddingHorizontal: 18,
     paddingVertical: 9,
-    borderRadius: 0,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.teal,
   },
   joinText: {
-    fontFamily: 'SpaceGrotesk-Bold',
+    fontFamily: fonts.button,
     fontSize: 12,
-    color: BG,
-    letterSpacing: 1.5,
+    color: colors.onTeal,
+    letterSpacing: 1,
   },
 });

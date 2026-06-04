@@ -10,11 +10,7 @@ import {
   SpaceGrotesk_500Medium,
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
-import {
-  DMSans_400Regular,
-  DMSans_500Medium,
-  DMSans_700Bold,
-} from '@expo-google-fonts/dm-sans';
+import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { colors } from '@/constants/theme';
@@ -52,7 +48,14 @@ function AppContent() {
 
   if (isLoading || !fontsLoaded) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <ActivityIndicator size="large" color={colors.lime} />
       </View>
     );
@@ -69,13 +72,56 @@ function AppContent() {
       <Stack.Screen name="index" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="messages" options={{ headerShown: true, title: 'MESSAGES', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1, headerTitleStyle: { fontFamily: 'SpaceGrotesk-Bold' } }} />
-      <Stack.Screen name="event/[id]" options={{ headerShown: true, title: 'EVENT', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1 }} />
-      <Stack.Screen name="profile/[id]" options={{ headerShown: true, title: 'PROFILE', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1 }} />
-      <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'CHAT', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1 }} />
-      <Stack.Screen name="post/create" options={{ presentation: 'modal', headerShown: true, title: 'NEW POST', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1 }} />
-      <Stack.Screen name="notifications" options={{ headerShown: true, title: 'NOTIFICATIONS', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1 }} />
-      <Stack.Screen name="leaderboard" options={{ headerShown: true, title: 'LEADERBOARD', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text1 }} />
+      <Stack.Screen
+        name="messages"
+        options={{
+          headerShown: true,
+          title: 'MESSAGES',
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text1,
+          headerTitleStyle: { fontFamily: 'SpaceGrotesk-Bold' },
+        }}
+      />
+      <Stack.Screen
+        name="event/[id]"
+        options={{
+          headerShown: true,
+          title: 'EVENT',
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text1,
+        }}
+      />
+      <Stack.Screen name="profile/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="profile/edit" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="profile/connections"
+        options={{
+          headerShown: true,
+          title: 'CONNECTIONS',
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text1,
+        }}
+      />
+      <Stack.Screen
+        name="chat/[id]"
+        options={{
+          headerShown: true,
+          title: 'CHAT',
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text1,
+        }}
+      />
+      <Stack.Screen name="post/create" options={{ presentation: 'modal', headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="leaderboard"
+        options={{
+          headerShown: true,
+          title: 'LEADERBOARD',
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text1,
+        }}
+      />
     </Stack>
   );
 }

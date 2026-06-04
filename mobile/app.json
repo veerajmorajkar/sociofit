@@ -1,44 +1,80 @@
 {
   "expo": {
-    "name": "FitSocial",
+    "name": "Mumbai Fitness Mafia",
     "slug": "fitsocial",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
     "scheme": "fitsocial",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0E0E14"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.fitsocial.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Mumbai Fitness Mafia uses your location to show nearby events on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Mumbai Fitness Mafia uses your location to show nearby events on the map."
+      },
       "config": {
-        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_KEY"
+        "googleMapsApiKey": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII"
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0E0E14"
       },
       "package": "app.fitsocial.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_KEY"
+          "apiKey": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII"
         }
       }
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#0E0E14",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FitSocial uses your location when you create events so they appear in the right area."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Mumbai Fitness Mafia needs access to your photos so you can create posts.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "googleMapsIosApiKey": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
+      "googleMapsAndroidApiKey": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
+      "router": {},
+      "eas": {
+        "projectId": "ce056c20-009d-442c-b061-568ff76715b2"
+      }
+    },
+    "owner": "veeraj02"
   }
 }

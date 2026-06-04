@@ -1,10 +1,22 @@
-import { View, Text, TextInput, Pressable, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '@/services/auth.service';
 import { useAuthStore } from '@/stores/authStore';
-import { colors, radius, fonts, shadows } from '@/constants/theme';
+import { colors, radius, fonts } from '@/constants/theme';
+import { API_URL } from '@/constants/config';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -26,44 +38,31 @@ export default function LoginScreen() {
       } else {
         Alert.alert('Login failed', result.error ?? 'Invalid credentials.');
       }
-    } catch {
-      Alert.alert('Connection error', 'Could not reach the server.');
+    } catch (err) {
+      Alert.alert(
+        'Connection error',
+        `${err instanceof Error ? err.message : 'Could not reach the server.'}\n\nAPI: ${API_URL}`,
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const inputStyle = {
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: colors.text1,
-    marginBottom: 12,
-    // Carved neumorphic
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-  } as const;
-
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ flex: 1, paddingHorizontal: 16, justifyContent: 'center' }}>
-          <Text style={{ fontFamily: fonts.heading, fontSize: 28, color: colors.cream, textTransform: 'uppercase', letterSpacing: -1, marginBottom: 8 }}>
-            WELCOME BACK
-          </Text>
-          <Text style={{ fontFamily: fonts.body, fontSize: 14, color: colors.text3, marginBottom: 32 }}>
-            Sign in to your FitSocial account
-          </Text>
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={s.title}>WELCOME BACK</Text>
+          <Text style={s.subtitle}>Sign in to Mumbai Fitness Mafia</Text>
 
           <TextInput
-            style={inputStyle}
+            style={s.input}
             placeholder="EMAIL"
-            placeholderTextColor={colors.text4}
+            placeholderTextColor={colors.textMuted}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -73,9 +72,9 @@ export default function LoginScreen() {
           />
 
           <TextInput
-            style={{ ...inputStyle, marginBottom: 24 }}
+            style={[s.input, s.inputLast]}
             placeholder="PASSWORD"
-            placeholderTextColor={colors.text4}
+            placeholderTextColor={colors.textMuted}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -85,45 +84,118 @@ export default function LoginScreen() {
             accessibilityLabel="Password input"
           />
 
-          <Pressable
-            style={({ pressed }) => ({
-              backgroundColor: pressed ? colors.limeDark : colors.lime,
-              borderRadius: radius.card,
-              paddingVertical: 16,
-              alignItems: 'center',
-              marginBottom: 16,
-              transform: [{ scale: pressed ? 0.97 : 1 }],
-              opacity: loading ? 0.7 : 1,
-              ...shadows.lime,
-            })}
+          <Link href="/(auth)/forgot-password" asChild>
+            <TouchableOpacity style={s.forgotRow} accessibilityRole="link">
+              <Text style={s.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+          </Link>
+
+          <TouchableOpacity
+            style={[s.btn, loading && s.btnDisabled]}
             onPress={() => void handleLogin()}
             disabled={loading}
+            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Sign in"
           >
             {loading ? (
-              <ActivityIndicator color={colors.textInverse} />
+              <ActivityIndicator color={colors.onTeal} />
             ) : (
-              <Text style={{ fontFamily: fonts.heading, fontSize: 14, color: colors.textInverse, textTransform: 'uppercase', letterSpacing: 1 }}>
-                SIGN IN
-              </Text>
+              <Text style={s.btnText}>SIGN IN</Text>
             )}
-          </Pressable>
+          </TouchableOpacity>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-            <Text style={{ fontFamily: fonts.body, fontSize: 14, color: colors.text3 }}>
-              Don&apos;t have an account?
-            </Text>
+          <View style={s.switchRow}>
+            <Text style={s.switchLabel}>Don't have an account? </Text>
             <Link href="/(auth)/signup" asChild>
-              <Pressable accessibilityRole="link">
-                <Text style={{ fontFamily: fonts.bodyBold, fontSize: 14, color: colors.lime }}>
-                  SIGN UP
-                </Text>
-              </Pressable>
+              <TouchableOpacity accessibilityRole="link">
+                <Text style={s.switchAction}>SIGN UP</Text>
+              </TouchableOpacity>
             </Link>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
   );
 }
+
+const s = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.bgPrimary,
+  },
+  scroll: {
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  title: {
+    fontFamily: fonts.h1,
+    fontSize: 32,
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.textMuted,
+    marginBottom: 36,
+  },
+  input: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: colors.textPrimary,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.surface3,
+  },
+  inputLast: {
+    marginBottom: 14,
+  },
+  forgotRow: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
+  },
+  forgotText: {
+    fontFamily: fonts.bodyStrong,
+    fontSize: 13,
+    color: colors.purpleSoft,
+  },
+  btn: {
+    backgroundColor: colors.tealPrimary,
+    borderRadius: radius.md,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  btnDisabled: {
+    opacity: 0.65,
+  },
+  btnText: {
+    fontFamily: fonts.h2,
+    fontSize: 15,
+    color: colors.onTeal,
+    letterSpacing: 1,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  switchLabel: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.textMuted,
+  },
+  switchAction: {
+    fontFamily: fonts.bodyStrong,
+    fontSize: 14,
+    color: colors.tealPrimary,
+  },
+});

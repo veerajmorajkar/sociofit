@@ -5,46 +5,66 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg: '#0E0E0E',
-        surface: '#161616',
-        'surface-2': '#1E1E1E',
-        'surface-3': '#262626',
-        border: '#2E2E2E',
-        'border-strong': '#3A3A3A',
+        // Backgrounds & surfaces
+        bg: '#0E0E14',
+        'surface-1': '#17172A',
+        surface: '#17172A',
+        'surface-2': '#1F1F38',
+        'surface-3': '#2A2A48',
+        border: '#2A2A48',
 
-        'text-1': '#E8E0D0',
-        'text-2': '#B0A898',
-        'text-3': '#706860',
-        'text-4': '#4A4440',
-        'text-inverse': '#0E0E0E',
+        // Brand purple
+        'purple-deep': '#3B1F8C',
+        'purple-brand': '#5B2ECC',
+        'purple-hero': '#7B4DFF',
+        'purple-soft': '#A882FF',
 
-        lime: { DEFAULT: '#D4EA4D', dark: '#BEDD1A' },
-        sage: { DEFAULT: '#52A870', light: '#9ACFAE' },
-        cream: '#E8E0D0',
+        // Electric teal
+        'teal-primary': '#00E5C3',
+        'teal-mid': '#00BFA5',
+        'teal-dark': '#007A6A',
 
-        success: '#22C55E',
-        warning: '#F59E0B',
-        error: '#EF4444',
-        info: '#3B82F6',
-        premium: '#A855F7',
-        live: '#FF4444',
+        // Prestige gold
+        gold: '#C9A84C',
+        'gold-light': '#E8C96A',
+        'gold-glow': '#F5E0A0',
+
+        // Typography
+        'text-primary': '#FFFFFF',
+        'text-secondary': '#C4BEFF',
+        'text-muted': '#7A74A8',
+        'text-disabled': '#3A3A5A',
+
+        // Semantic
+        success: '#00E5C3',
+        error: '#FF4D6D',
+        warning: '#F5A623',
+        info: '#A882FF',
       },
       borderRadius: {
         none: '0px',
         xs: '6px',
-        sm: '10px',
-        md: '14px',
-        card: '16px',
-        lg: '20px',
+        sm: '8px',
+        md: '12px',
+        card: '12px',
+        lg: '16px',
         xl: '24px',
+        full: '9999px',
       },
       fontFamily: {
-        heading: ['SpaceGrotesk-Bold'],
-        'heading-medium': ['SpaceGrotesk-Medium'],
-        'heading-regular': ['SpaceGrotesk-Regular'],
-        body: ['DMSans-Regular'],
-        'body-medium': ['DMSans-Medium'],
-        'body-bold': ['DMSans-Bold'],
+        // Outfit — primary
+        display: ['Outfit_900Black'],
+        h1: ['Outfit_700Bold'],
+        h2: ['Outfit_600SemiBold'],
+        heading: ['Outfit_700Bold'],
+        body: ['Outfit_400Regular'],
+        'body-medium': ['Outfit_500Medium'],
+        'body-strong': ['Outfit_600SemiBold'],
+        'body-bold': ['Outfit_700Bold'],
+        // Space Grotesk — stats / labels / metadata
+        label: ['SpaceGrotesk_700Bold'],
+        stat: ['SpaceGrotesk_600SemiBold'],
+        caption: ['SpaceGrotesk_400Regular'],
       },
     },
   },

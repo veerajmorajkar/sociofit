@@ -10,6 +10,7 @@ export const updateProfileSchema = z.object({
   neighbourhood: z.string().max(100).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  activities: z.array(z.string().min(1).max(50)).optional(),
 });
 
 export const paginationSchema = z.object({

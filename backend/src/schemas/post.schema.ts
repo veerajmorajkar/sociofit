@@ -21,12 +21,21 @@ export const createPostSchema = z.object({
   locationName: z.string().max(255).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  taggedUsernames: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(50)
+        .transform((s) => s.replace(/^@/, '').toLowerCase()),
+    )
+    .max(10)
+    .optional(),
 });
 
 export const feedQuerySchema = z.object({
   cursor: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
-  type: z.enum(['following', 'discover']).default('discover'),
 });
 
 export const commentSchema = z.object({

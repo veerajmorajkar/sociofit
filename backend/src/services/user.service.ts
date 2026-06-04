@@ -1,7 +1,8 @@
 import { db } from '../config/database.js';
 import { users, follows, posts, clubProfiles } from '../db/schema.js';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, or, ilike } from 'drizzle-orm';
 import type { UpdateProfileInput } from '../schemas/user.schema.js';
+import { notifyUser } from './notification.service.js';
 
 // ── Get Profile ──────────────────────────────────────────────
 export async function getProfile(userId: string, requestingUserId: string) {
@@ -20,6 +21,7 @@ export async function getProfile(userId: string, requestingUserId: string) {
       city: users.city,
       neighbourhood: users.neighbourhood,
       isVerified: users.isVerified,
+      activities: users.activities,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -103,6 +105,37 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
   return updated;
 }
 
+// ── Search users ─────────────────────────────────────────────
+export async function searchUsers(query: string, limit = 20) {
+  const q = query.trim().replace(/^@/, '');
+  if (q.length < 1) return [];
+
+  const pattern = `%${q}%`;
+  const prefix = `${q}%`;
+  return db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      username: users.username,
+      avatarUrl: users.avatarUrl,
+      accountType: users.accountType,
+      isVerified: users.isVerified,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.isActive, true),
+        or(
+          ilike(users.username, prefix),
+          ilike(users.displayName, prefix),
+          ilike(users.username, pattern),
+          ilike(users.displayName, pattern),
+        ),
+      ),
+    )
+    .limit(Math.min(limit, 30));
+}
+
 // ── Follow / Unfollow ────────────────────────────────────────
 export async function followUser(followerId: string, followingId: string) {
   if (followerId === followingId) throw new Error('Cannot follow yourself');
@@ -124,6 +157,20 @@ export async function followUser(followerId: string, followingId: string) {
   if (existing) return { following: true };
 
   await db.insert(follows).values({ followerId, followingId });
+
+  const [follower] = await db
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, followerId))
+    .limit(1);
+
+  notifyUser({
+    userId: followingId,
+    type: 'follow',
+    title: `${follower?.displayName ?? 'Someone'} started following you`,
+    data: { userId: followerId },
+  });
+
   return { following: true };
 }
 
@@ -201,4 +248,9 @@ export async function getFollowing(userId: string, cursor?: string, limit = 20) 
     cursor: hasMore ? (result[result.length - 1]?.id ?? null) : null,
     hasMore,
   };
+}
+
+// ── Push Token ───────────────────────────────────────────────
+export async function savePushToken(userId: string, token: string) {
+  await db.update(users).set({ expoPushToken: token }).where(eq(users.id, userId));
 }

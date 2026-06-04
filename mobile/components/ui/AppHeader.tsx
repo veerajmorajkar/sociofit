@@ -1,63 +1,73 @@
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, MessageCircle } from 'lucide-react-native';
+import { Bell, Plus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNotifications } from '@/hooks/useNotifications';
 import { colors, fonts } from '@/constants/theme';
+import MFMLogo from './MFMLogo';
 
 interface AppHeaderProps {
-  title?: string;
   showActions?: boolean;
 }
 
-const ICON_BOX = 46;
+const HIT = 38;
 
-export default function AppHeader({
-  title = 'FITSOCIAL',
-  showActions = true,
-}: AppHeaderProps) {
+export default function AppHeader({ showActions = true }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { data: notifications } = useNotifications();
+
+  const notificationUnread = notifications?.filter((n) => !n.isRead).length ?? 0;
 
   return (
     <View>
       <LinearGradient
-        colors={['#060606', '#0A0A0A', colors.bg, colors.bg]}
-        locations={[0, 0.35, 0.75, 1]}
+        colors={['#08080C', '#0B0B12', colors.bgPrimary, colors.bgPrimary]}
+        locations={[0, 0.45, 0.88, 1]}
         style={{ paddingTop: insets.top }}
       >
         <View style={styles.bar}>
           {showActions ? (
-            <Pressable
+            <TouchableOpacity
+              onPress={() => router.push('/post/create' as never)}
+              style={styles.iconHit}
+              activeOpacity={0.6}
+              hitSlop={12}
+              accessibilityLabel="Create post"
+              accessibilityRole="button"
+            >
+              <Plus size={20} strokeWidth={1.75} color={colors.textPrimary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.spacer} />
+          )}
+
+          <MFMLogo />
+
+          {showActions ? (
+            <TouchableOpacity
               onPress={() => router.push('/notifications')}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-              hitSlop={8}
+              style={styles.iconHit}
+              activeOpacity={0.6}
+              hitSlop={12}
               accessibilityLabel="Notifications"
               accessibilityRole="button"
             >
-              <Bell size={22} strokeWidth={1.75} color={colors.text2} />
-            </Pressable>
+              <Bell size={20} strokeWidth={1.75} color={colors.textPrimary} />
+              {notificationUnread > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {notificationUnread > 9 ? '9+' : notificationUnread}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
           ) : (
-            <View style={{ width: ICON_BOX }} />
-          )}
-
-          <Text style={styles.logotype}>{title}</Text>
-
-          {showActions ? (
-            <Pressable
-              onPress={() => router.push('/messages')}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-              hitSlop={8}
-              accessibilityLabel="Messages"
-              accessibilityRole="button"
-            >
-              <MessageCircle size={22} strokeWidth={1.75} color={colors.text2} />
-            </Pressable>
-          ) : (
-            <View style={{ width: ICON_BOX }} />
+            <View style={styles.spacer} />
           )}
         </View>
 
-        <View style={{ height: 20 }} />
+        <View style={styles.fadeTail} />
       </LinearGradient>
     </View>
   );
@@ -67,48 +77,39 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
-  logotype: {
-    fontFamily: fonts.heading,
-    fontSize: 18,
-    color: colors.lime,
-    textTransform: 'uppercase',
-    letterSpacing: 3,
+  fadeTail: {
+    height: 5,
   },
-  iconButton: {
-    width: ICON_BOX,
-    height: ICON_BOX,
-    borderRadius: 14,
-    backgroundColor: colors.surface2,
+  spacer: {
+    width: HIT,
+    height: HIT,
+  },
+  iconHit: {
+    width: HIT,
+    height: HIT,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.04)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 5, height: 5 },
-        shadowOpacity: 0.6,
-        shadowRadius: 12,
-      },
-      android: { elevation: 10 },
-    }),
+    position: 'relative',
   },
-  iconButtonPressed: {
-    backgroundColor: colors.surface,
-    borderColor: 'rgba(255,255,255,0.02)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 1, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-      },
-      android: { elevation: 1 },
-    }),
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontFamily: fonts.label,
+    fontSize: 9,
+    color: colors.textPrimary,
   },
 });

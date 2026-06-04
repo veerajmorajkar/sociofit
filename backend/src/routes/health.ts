@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { sendSuccess } from '../utils/response.js';
 
-export async function healthRoute(app: FastifyInstance) {
+export function healthRoute(app: FastifyInstance) {
   app.get('/health', async (_request, reply) => {
     return sendSuccess(reply, {
       status: 'ok',

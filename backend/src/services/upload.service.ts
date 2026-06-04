@@ -31,7 +31,9 @@ export async function generatePresignedUrl(
   // Validate file type
   const ext = ALLOWED_TYPES[fileType];
   if (!ext) {
-    throw new Error(`File type ${fileType} is not allowed. Allowed: ${Object.keys(ALLOWED_TYPES).join(', ')}`);
+    throw new Error(
+      `File type ${fileType} is not allowed. Allowed: ${Object.keys(ALLOWED_TYPES).join(', ')}`,
+    );
   }
 
   // Validate file size
@@ -42,11 +44,12 @@ export async function generatePresignedUrl(
   // Generate a unique key: folder/userId/uuid.ext
   const key = `${folder}/${userId}/${randomUUID()}.${ext}`;
 
+  // Do not bind ContentLength into the signature — mobile must send exact bytes and
+  // estimates (width×height, missing MediaLibrary fileSize) cause R2 to return 403.
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
     ContentType: fileType,
-    ContentLength: fileSize,
   });
 
   // Pre-signed URL expires in 1 hour

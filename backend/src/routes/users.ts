@@ -4,14 +4,16 @@ import { updateProfileSchema, paginationSchema } from '../schemas/user.schema.js
 import {
   getProfile,
   updateProfile,
+  searchUsers,
   followUser,
   unfollowUser,
   getFollowers,
   getFollowing,
+  savePushToken,
 } from '../services/user.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
-export async function userRoutes(app: FastifyInstance) {
+export function userRoutes(app: FastifyInstance) {
   // ── Get own profile ───────────────────────────────────────
   app.get('/me', { preHandler: authenticate }, async (request, reply) => {
     const profile = await getProfile(request.user!.userId, request.user!.userId);
@@ -25,6 +27,16 @@ export async function userRoutes(app: FastifyInstance) {
     const updated = await updateProfile(request.user!.userId, body);
     if (!updated) return sendError(reply, 'Failed to update profile', 500);
     return sendSuccess(reply, updated);
+  });
+
+  // ── Search users ──────────────────────────────────────────
+  app.get('/search', { preHandler: authenticate }, async (request, reply) => {
+    const { q } = request.query as { q?: string };
+    if (!q || q.trim().replace(/^@/, '').length < 1) {
+      return sendSuccess(reply, []);
+    }
+    const results = await searchUsers(q);
+    return sendSuccess(reply, results);
   });
 
   // ── Get user profile by ID ────────────────────────────────
@@ -45,6 +57,16 @@ export async function userRoutes(app: FastifyInstance) {
       const msg = err instanceof Error ? err.message : 'Failed to follow';
       return sendError(reply, msg, msg.includes('yourself') ? 400 : 404);
     }
+  });
+
+  // ── Register push token ───────────────────────────────────
+  app.put('/me/push-token', { preHandler: authenticate }, async (request, reply) => {
+    const { token } = request.body as { token?: string };
+    if (!token || typeof token !== 'string') {
+      return sendError(reply, 'token is required', 400);
+    }
+    await savePushToken(request.user!.userId, token);
+    return sendSuccess(reply, { saved: true });
   });
 
   // ── Unfollow user ─────────────────────────────────────────

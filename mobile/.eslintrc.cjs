@@ -19,6 +19,8 @@ module.exports = {
   },
   rules: {
     'react/react-in-jsx-scope': 'off',
+    // RN text nodes don't need HTML entity escaping.
+    'react/no-unescaped-entities': 'off',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/no-explicit-any': 'error',
     'no-console': ['warn', { allow: ['warn', 'error'] }],

@@ -14,7 +14,7 @@ import {
 } from '../services/messaging.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
-export async function messageRoutes(app: FastifyInstance) {
+export function messageRoutes(app: FastifyInstance) {
   // ── Get Conversations List ────────────────────────────────
   app.get('/conversations', { preHandler: authenticate }, async (request, reply) => {
     const { cursor, limit } = conversationQuerySchema.parse(request.query);
@@ -38,49 +38,37 @@ export async function messageRoutes(app: FastifyInstance) {
   });
 
   // ── Get Messages in Conversation ──────────────────────────
-  app.get(
-    '/conversations/:id/messages',
-    { preHandler: authenticate },
-    async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const { cursor, limit } = conversationQuerySchema.parse(request.query);
-      try {
-        const result = await getMessages(request.user!.userId, id, cursor, limit);
-        return sendSuccess(reply, result.messages, 200, {
-          cursor: result.cursor,
-          hasMore: result.hasMore,
-        });
-      } catch (err) {
-        return sendError(reply, 'Not a participant in this conversation', 403);
-      }
-    },
-  );
+  app.get('/conversations/:id/messages', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { cursor, limit } = conversationQuerySchema.parse(request.query);
+    try {
+      const result = await getMessages(request.user!.userId, id, cursor, limit);
+      return sendSuccess(reply, result.messages, 200, {
+        cursor: result.cursor,
+        hasMore: result.hasMore,
+      });
+    } catch {
+      return sendError(reply, 'Not a participant in this conversation', 403);
+    }
+  });
 
   // ── Send Message ──────────────────────────────────────────
-  app.post(
-    '/conversations/:id/messages',
-    { preHandler: authenticate },
-    async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const body = sendMessageSchema.parse(request.body);
-      try {
-        const message = await sendMessage(request.user!.userId, id, body);
-        return sendSuccess(reply, message, 201);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to send message';
-        return sendError(reply, msg, msg.includes('participant') ? 403 : 500);
-      }
-    },
-  );
+  app.post('/conversations/:id/messages', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = sendMessageSchema.parse(request.body);
+    try {
+      const message = await sendMessage(request.user!.userId, id, body);
+      return sendSuccess(reply, message, 201);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send message';
+      return sendError(reply, msg, msg.includes('participant') ? 403 : 500);
+    }
+  });
 
   // ── Mark Conversation as Read ─────────────────────────────
-  app.patch(
-    '/conversations/:id/read',
-    { preHandler: authenticate },
-    async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const result = await markAsRead(request.user!.userId, id);
-      return sendSuccess(reply, result);
-    },
-  );
+  app.patch('/conversations/:id/read', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await markAsRead(request.user!.userId, id);
+    return sendSuccess(reply, result);
+  });
 }

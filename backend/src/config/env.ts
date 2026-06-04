@@ -42,6 +42,9 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
   POSTHOG_API_KEY: z.string().optional(),
   POSTHOG_HOST: z.string().default('https://app.posthog.com'),
+
+  /** Google Places API (server-side; enable Places API + autocomplete in Cloud Console) */
+  GOOGLE_PLACES_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

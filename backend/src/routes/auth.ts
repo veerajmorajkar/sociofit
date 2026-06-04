@@ -2,13 +2,19 @@ import type { FastifyInstance } from 'fastify';
 import { eq, or } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '../config/database.js';
-import { users, refreshTokens } from '../db/schema.js';
-import { registerSchema, loginSchema, refreshTokenSchema } from '../schemas/auth.schema.js';
+import { users, refreshTokens, passwordResetTokens } from '../db/schema.js';
+import {
+  registerSchema,
+  loginSchema,
+  refreshTokenSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from '../schemas/auth.schema.js';
 import { hashPassword, comparePassword } from '../utils/hash.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
-export async function authRoutes(app: FastifyInstance) {
+export function authRoutes(app: FastifyInstance) {
   // ── Register ──
   app.post('/register', async (request, reply) => {
     const body = registerSchema.parse(request.body);
@@ -46,6 +52,8 @@ export async function authRoutes(app: FastifyInstance) {
         displayName: body.displayName,
         username: body.username,
         authProvider: 'email',
+        dateOfBirth: body.birthdate ? new Date(body.birthdate) : null,
+        activities: body.activities ?? [],
       })
       .returning({
         id: users.id,
@@ -205,5 +213,67 @@ export async function authRoutes(app: FastifyInstance) {
     await db.delete(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash));
 
     return sendSuccess(reply, { message: 'Logged out successfully' });
+  });
+
+  // ── Forgot Password ──
+  app.post('/forgot-password', async (request, reply) => {
+    const body = forgotPasswordSchema.parse(request.body);
+
+    // Always respond success (avoid account enumeration)
+    const [user] = await db
+      .select({ id: users.id, isActive: users.isActive })
+      .from(users)
+      .where(eq(users.email, body.email))
+      .limit(1);
+
+    if (!user || !user.isActive) {
+      return sendSuccess(reply, { ok: true });
+    }
+
+    // Invalidate previous tokens for this user
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id));
+
+    const token = crypto.randomBytes(24).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    await db.insert(passwordResetTokens).values({
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+    });
+
+    // In production you'd email `token` as part of a reset link.
+    // For dev, we return it so you can test in Expo without email setup.
+    if (process.env.NODE_ENV !== 'production') {
+      return sendSuccess(reply, { ok: true, token });
+    }
+    return sendSuccess(reply, { ok: true });
+  });
+
+  // ── Reset Password ──
+  app.post('/reset-password', async (request, reply) => {
+    const body = resetPasswordSchema.parse(request.body);
+    const tokenHash = crypto.createHash('sha256').update(body.token).digest('hex');
+
+    const [record] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, tokenHash))
+      .limit(1);
+
+    if (!record || record.expiresAt < new Date()) {
+      return sendError(reply, 'Invalid or expired reset token', 400);
+    }
+
+    const passwordHash = await hashPassword(body.password);
+    await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, record.userId));
+
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, record.id));
+
+    return sendSuccess(reply, { ok: true });
   });
 }

@@ -23,6 +23,8 @@ interface RegisterParams {
   accountType: 'personal' | 'club';
   displayName: string;
   username: string;
+  birthdate?: string;
+  activities?: string[];
 }
 
 interface LoginParams {
@@ -40,4 +42,16 @@ export async function login(params: LoginParams) {
 
 export async function logout(refreshToken: string) {
   return api.post<{ message: string }>('/auth/logout', { refreshToken }, { auth: false });
+}
+
+export async function forgotPassword(email: string) {
+  return api.post<{ ok: boolean; token?: string }>(
+    '/auth/forgot-password',
+    { email },
+    { auth: false },
+  );
+}
+
+export async function resetPassword(token: string, password: string) {
+  return api.post<{ ok: boolean }>('/auth/reset-password', { token, password }, { auth: false });
 }

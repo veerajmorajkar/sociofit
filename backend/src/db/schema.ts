@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
   jsonb,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -30,6 +31,7 @@ export const users = pgTable(
     avatarUrl: varchar('avatar_url', { length: 500 }),
     coverPhotoUrl: varchar('cover_photo_url', { length: 500 }),
     websiteUrl: varchar('website_url', { length: 500 }),
+    dateOfBirth: timestamp('date_of_birth', { withTimezone: true }),
     city: varchar('city', { length: 100 }),
     neighbourhood: varchar('neighbourhood', { length: 100 }),
     latitude: decimal('latitude', { precision: 10, scale: 7 }),
@@ -41,6 +43,7 @@ export const users = pgTable(
     stravaAccessToken: text('strava_access_token'),
     stravaRefreshToken: text('strava_refresh_token'),
     stravaTokenExpires: timestamp('strava_token_expires', { withTimezone: true }),
+    activities: text('activities').array().default([]),
     expoPushToken: varchar('expo_push_token', { length: 255 }),
     isVerified: boolean('is_verified').default(false),
     isActive: boolean('is_active').default(true),
@@ -51,6 +54,26 @@ export const users = pgTable(
   (table) => [
     index('idx_users_account_type').on(table.accountType),
     index('idx_users_created_at').on(table.createdAt),
+  ],
+);
+
+// ============================================================
+// PASSWORD RESET TOKENS
+// ============================================================
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 255 }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_password_reset_user').on(table.userId),
+    uniqueIndex('idx_password_reset_token_hash_unique').on(table.tokenHash),
   ],
 );
 
@@ -175,6 +198,26 @@ export const postMedia = pgTable(
 );
 
 // ============================================================
+// POST TAGS (people tagged in posts)
+// ============================================================
+export const postTags = pgTable(
+  'post_tags',
+  {
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.postId, table.userId] }),
+    index('idx_post_tags_user').on(table.userId),
+  ],
+);
+
+// ============================================================
 // LIKES
 // ============================================================
 export const likes = pgTable(
@@ -192,6 +235,29 @@ export const likes = pgTable(
   (table) => [
     uniqueIndex('idx_likes_unique').on(table.userId, table.postId),
     index('idx_likes_post').on(table.postId),
+  ],
+);
+
+// ============================================================
+// REPOSTS (in-app retweet)
+// ============================================================
+export const reposts = pgTable(
+  'reposts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('idx_reposts_unique').on(table.userId, table.postId),
+    index('idx_reposts_post').on(table.postId),
+    index('idx_reposts_user').on(table.userId),
+    index('idx_reposts_created_at').on(table.createdAt),
   ],
 );
 
@@ -254,6 +320,8 @@ export const events = pgTable(
     avgRating: decimal('avg_rating', { precision: 3, scale: 2 }).default('0'),
     totalReviews: integer('total_reviews').default(0),
     isActive: boolean('is_active').default(true),
+    reminder24hSentAt: timestamp('reminder_24h_sent_at', { withTimezone: true }),
+    reminder1hSentAt: timestamp('reminder_1h_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -438,13 +506,22 @@ export const payments = pgTable(
 export const usersRelations = relations(users, ({ one, many }) => ({
   clubProfile: one(clubProfiles, { fields: [users.id], references: [clubProfiles.userId] }),
   posts: many(posts),
+  reposts: many(reposts),
   followers: many(follows, { relationName: 'following' }),
   following: many(follows, { relationName: 'follower' }),
 }));
 
 export const followsRelations = relations(follows, ({ one }) => ({
-  follower: one(users, { fields: [follows.followerId], references: [users.id], relationName: 'follower' }),
-  following: one(users, { fields: [follows.followingId], references: [users.id], relationName: 'following' }),
+  follower: one(users, {
+    fields: [follows.followerId],
+    references: [users.id],
+    relationName: 'follower',
+  }),
+  following: one(users, {
+    fields: [follows.followingId],
+    references: [users.id],
+    relationName: 'following',
+  }),
 }));
 
 export const postsRelations = relations(posts, ({ one, many }) => ({
@@ -452,13 +529,30 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   category: one(categories, { fields: [posts.categoryId], references: [categories.id] }),
   media: many(postMedia),
   likes: many(likes),
+  reposts: many(reposts),
   comments: many(comments),
+  tags: many(postTags),
+}));
+
+export const postTagsRelations = relations(postTags, ({ one }) => ({
+  post: one(posts, { fields: [postTags.postId], references: [posts.id] }),
+  user: one(users, { fields: [postTags.userId], references: [users.id] }),
+}));
+
+export const repostsRelations = relations(reposts, ({ one }) => ({
+  user: one(users, { fields: [reposts.userId], references: [users.id] }),
+  post: one(posts, { fields: [reposts.postId], references: [posts.id] }),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
   organiser: one(users, { fields: [events.organiserId], references: [users.id] }),
   category: one(categories, { fields: [events.categoryId], references: [categories.id] }),
   participants: many(eventParticipants),
+}));
+
+export const eventParticipantsRelations = relations(eventParticipants, ({ one }) => ({
+  event: one(events, { fields: [eventParticipants.eventId], references: [events.id] }),
+  user: one(users, { fields: [eventParticipants.userId], references: [users.id] }),
 }));
 
 export const commentsRelations = relations(comments, ({ one }) => ({
