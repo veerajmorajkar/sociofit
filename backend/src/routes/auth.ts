@@ -9,10 +9,21 @@ import {
   refreshTokenSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  googleAuthSchema,
+  appleAuthSchema,
+  oauthCompleteSchema,
 } from '../schemas/auth.schema.js';
+import { authenticate } from '../middleware/auth.js';
+import {
+  verifyGoogleIdToken,
+  verifyAppleIdentityToken,
+  authenticateOAuthUser,
+  completeOAuthProfile,
+} from '../services/oauth.service.js';
 import { hashPassword, comparePassword } from '../utils/hash.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { ensureClubAnnouncementChannel } from '../services/messaging-club.service.js';
 
 export function authRoutes(app: FastifyInstance) {
   // ── Register ──
@@ -66,6 +77,10 @@ export function authRoutes(app: FastifyInstance) {
 
     if (!newUser) {
       return sendError(reply, 'Failed to create user', 500);
+    }
+
+    if (newUser.accountType === 'club') {
+      await ensureClubAnnouncementChannel(newUser.id);
     }
 
     // Generate tokens
@@ -249,6 +264,65 @@ export function authRoutes(app: FastifyInstance) {
       return sendSuccess(reply, { ok: true, token });
     }
     return sendSuccess(reply, { ok: true });
+  });
+
+  // ── Google Sign-In ──
+  app.post('/google', async (request, reply) => {
+    try {
+      const body = googleAuthSchema.parse(request.body);
+      const profile = await verifyGoogleIdToken(body.idToken);
+      const result = await authenticateOAuthUser({
+        profile,
+        mode: body.mode,
+        accountType: body.accountType,
+      });
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Google authentication failed';
+      const status = message.includes('No account found') ? 404 : 401;
+      return sendError(reply, message, status);
+    }
+  });
+
+  // ── Apple Sign-In ──
+  app.post('/apple', async (request, reply) => {
+    try {
+      const body = appleAuthSchema.parse(request.body);
+      const profile = await verifyAppleIdentityToken(body.identityToken);
+      const result = await authenticateOAuthUser({
+        profile,
+        mode: body.mode,
+        accountType: body.accountType,
+        fullName: body.fullName,
+      });
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Apple authentication failed';
+      const status = message.includes('No account found') ? 404 : 401;
+      return sendError(reply, message, status);
+    }
+  });
+
+  // ── Complete OAuth profile (activities, username, birthdate) ──
+  app.post('/oauth/complete', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const body = oauthCompleteSchema.parse(request.body);
+      const userId = request.user?.userId;
+      if (!userId) return sendError(reply, 'Unauthorized', 401);
+
+      const result = await completeOAuthProfile({
+        userId,
+        username: body.username,
+        accountType: body.accountType,
+        birthdate: body.birthdate,
+        activities: body.activities,
+      });
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not complete profile';
+      const status = message.includes('Username') ? 409 : 400;
+      return sendError(reply, message, status);
+    }
   });
 
   // ── Reset Password ──

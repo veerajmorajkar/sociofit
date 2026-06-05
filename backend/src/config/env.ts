@@ -45,6 +45,15 @@ const envSchema = z.object({
 
   /** Google Places API (server-side; enable Places API + autocomplete in Cloud Console) */
   GOOGLE_PLACES_API_KEY: z.string().optional(),
+
+  /** OAuth — Google Sign-In (verify ID tokens from iOS / Android / Web clients) */
+  GOOGLE_OAUTH_IOS_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_ANDROID_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_WEB_CLIENT_ID: z.string().optional(),
+
+  /** Apple Sign-In (bundle id / services id for identity token audience) */
+  APPLE_CLIENT_ID: z.string().optional(),
+  APPLE_BUNDLE_ID: z.string().default('app.fitsocial.mobile'),
 });
 
 const parsed = envSchema.safeParse(process.env);

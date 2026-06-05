@@ -1,18 +1,16 @@
 import {
-  View,
   Text,
   TextInput,
-  Pressable,
+  TouchableOpacity,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  StyleSheet,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import AuthFormShell from '@/components/auth/AuthFormShell';
 import { resetPassword } from '@/services/auth.service';
-import { colors, radius, fonts, shadows } from '@/constants/theme';
+import { radius, fonts } from '@/constants/theme';
 
 export default function ResetPasswordScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
@@ -50,96 +48,74 @@ export default function ResetPasswordScreen() {
     }
   };
 
-  const inputStyle = {
-    backgroundColor: colors.surface2,
+  const inputStyle = s.input;
+
+  return (
+    <AuthFormShell>
+      <Text style={s.title}>New password</Text>
+      <Text style={s.subtitle}>Choose a strong password for your account.</Text>
+
+      <TextInput
+        style={inputStyle}
+        placeholder="New password"
+        placeholderTextColor="rgba(255,255,255,0.45)"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        editable={!loading}
+      />
+      <TextInput
+        style={inputStyle}
+        placeholder="Confirm password"
+        placeholderTextColor="rgba(255,255,255,0.45)"
+        value={confirm}
+        onChangeText={setConfirm}
+        secureTextEntry
+        editable={!loading}
+      />
+
+      <TouchableOpacity
+        style={[s.btn, loading && s.btnDisabled]}
+        onPress={() => void onSubmit()}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#001A14" />
+        ) : (
+          <Text style={s.btnText}>UPDATE PASSWORD</Text>
+        )}
+      </TouchableOpacity>
+    </AuthFormShell>
+  );
+}
+
+const s = StyleSheet.create({
+  title: { fontFamily: fonts.h1, fontSize: 28, color: '#FFFFFF', marginBottom: 8 },
+  subtitle: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.72)',
+    marginBottom: 28,
+  },
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: fonts.body,
-    color: colors.textPrimary,
+    color: '#FFFFFF',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.surface3,
-  } as const;
-
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ flex: 1, paddingHorizontal: 16, justifyContent: 'center' }}>
-          <Text
-            style={{
-              fontFamily: fonts.heading,
-              fontSize: 26,
-              color: colors.cream,
-              textTransform: 'uppercase',
-              letterSpacing: -1,
-              marginBottom: 8,
-            }}
-          >
-            NEW PASSWORD
-          </Text>
-          <Text
-            style={{ fontFamily: fonts.body, fontSize: 14, color: colors.text3, marginBottom: 24 }}
-          >
-            Choose a strong password you’ll remember.
-          </Text>
-
-          <TextInput
-            style={inputStyle}
-            placeholder="NEW PASSWORD"
-            placeholderTextColor={colors.textMuted}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
-          <TextInput
-            style={{ ...inputStyle, marginBottom: 20 }}
-            placeholder="CONFIRM PASSWORD"
-            placeholderTextColor={colors.textMuted}
-            value={confirm}
-            onChangeText={setConfirm}
-            secureTextEntry
-            editable={!loading}
-            onSubmitEditing={() => void onSubmit()}
-            returnKeyType="go"
-          />
-
-          <Pressable
-            style={({ pressed }) => ({
-              backgroundColor: pressed ? colors.limeDark : colors.lime,
-              borderRadius: radius.card,
-              paddingVertical: 16,
-              alignItems: 'center',
-              transform: [{ scale: pressed ? 0.97 : 1 }],
-              opacity: loading ? 0.7 : 1,
-              ...shadows.lime,
-            })}
-            onPress={() => void onSubmit()}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <Text
-                style={{
-                  fontFamily: fonts.heading,
-                  fontSize: 14,
-                  color: colors.textInverse,
-                  textTransform: 'uppercase',
-                  letterSpacing: 1,
-                }}
-              >
-                UPDATE PASSWORD
-              </Text>
-            )}
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
-  );
-}
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  btn: {
+    backgroundColor: '#00E5C3',
+    borderRadius: radius.md,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  btnDisabled: { opacity: 0.7 },
+  btnText: { fontFamily: fonts.button, fontSize: 14, color: '#001A14', letterSpacing: 1 },
+});

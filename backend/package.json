@@ -19,6 +19,7 @@
     "db:push:force": "drizzle-kit push --force",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed:clubs": "tsx scripts/seed-club-users.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -33,9 +34,12 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.4",
     "fastify": "^5.2.1",
+    "google-auth-library": "^10.7.0",
     "ioredis": "^5.4.2",
+    "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.1",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.1",
     "zod": "^3.24.2"
   },

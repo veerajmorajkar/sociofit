@@ -2,17 +2,16 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
+  TouchableOpacity,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  StyleSheet,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import AuthFormShell from '@/components/auth/AuthFormShell';
 import { forgotPassword } from '@/services/auth.service';
-import { colors, radius, fonts, shadows } from '@/constants/theme';
+import { radius, fonts } from '@/constants/theme';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -30,14 +29,11 @@ export default function ForgotPasswordScreen() {
         Alert.alert('Reset failed', res.error ?? 'Try again');
         return;
       }
-
-      // Dev convenience: backend returns token in non-production.
       const token = res.data?.token;
       if (token) {
         router.push(`/(auth)/reset-password?token=${token}` as never);
         return;
       }
-
       Alert.alert('Check your email', 'If the account exists, a reset link has been sent.');
       router.back();
     } catch (err) {
@@ -47,86 +43,69 @@ export default function ForgotPasswordScreen() {
     }
   };
 
-  const inputStyle = {
-    backgroundColor: colors.surface2,
+  return (
+    <AuthFormShell>
+      <TouchableOpacity onPress={() => router.back()} style={s.back}>
+        <Text style={s.backText}>← Back</Text>
+      </TouchableOpacity>
+
+      <Text style={s.title}>Reset password</Text>
+      <Text style={s.subtitle}>Enter your email and we&apos;ll help you get back in.</Text>
+
+      <TextInput
+        style={s.input}
+        placeholder="Email"
+        placeholderTextColor="rgba(255,255,255,0.45)"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        editable={!loading}
+      />
+
+      <TouchableOpacity
+        style={[s.btn, loading && s.btnDisabled]}
+        onPress={() => void onSubmit()}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#001A14" />
+        ) : (
+          <Text style={s.btnText}>SEND RESET LINK</Text>
+        )}
+      </TouchableOpacity>
+    </AuthFormShell>
+  );
+}
+
+const s = StyleSheet.create({
+  back: { marginBottom: 16 },
+  backText: { fontFamily: fonts.bodyStrong, fontSize: 15, color: '#A882FF' },
+  title: { fontFamily: fonts.h1, fontSize: 28, color: '#FFFFFF', marginBottom: 8 },
+  subtitle: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.72)',
+    marginBottom: 28,
+  },
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: fonts.body,
-    color: colors.textPrimary,
-    marginBottom: 14,
+    color: '#FFFFFF',
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: colors.surface3,
-  } as const;
-
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ flex: 1, paddingHorizontal: 16, justifyContent: 'center' }}>
-          <Text
-            style={{
-              fontFamily: fonts.heading,
-              fontSize: 26,
-              color: colors.cream,
-              textTransform: 'uppercase',
-              letterSpacing: -1,
-              marginBottom: 8,
-            }}
-          >
-            RESET PASSWORD
-          </Text>
-          <Text
-            style={{ fontFamily: fonts.body, fontSize: 14, color: colors.text3, marginBottom: 24 }}
-          >
-            Enter your email and we’ll help you get back in.
-          </Text>
-
-          <TextInput
-            style={inputStyle}
-            placeholder="EMAIL"
-            placeholderTextColor={colors.textMuted}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
-
-          <Pressable
-            style={({ pressed }) => ({
-              backgroundColor: pressed ? colors.limeDark : colors.lime,
-              borderRadius: radius.card,
-              paddingVertical: 16,
-              alignItems: 'center',
-              transform: [{ scale: pressed ? 0.97 : 1 }],
-              opacity: loading ? 0.7 : 1,
-              ...shadows.lime,
-            })}
-            onPress={() => void onSubmit()}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <Text
-                style={{
-                  fontFamily: fonts.heading,
-                  fontSize: 14,
-                  color: colors.textInverse,
-                  textTransform: 'uppercase',
-                  letterSpacing: 1,
-                }}
-              >
-                SEND RESET LINK
-              </Text>
-            )}
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
-  );
-}
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  btn: {
+    backgroundColor: '#00E5C3',
+    borderRadius: radius.md,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  btnDisabled: { opacity: 0.7 },
+  btnText: { fontFamily: fonts.button, fontSize: 14, color: '#001A14', letterSpacing: 1 },
+});

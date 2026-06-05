@@ -15,6 +15,7 @@ interface AuthResponse {
   user: User;
   accessToken: string;
   refreshToken: string;
+  needsProfile?: boolean;
 }
 
 interface RegisterParams {
@@ -32,12 +33,44 @@ interface LoginParams {
   password: string;
 }
 
+interface GoogleAuthParams {
+  idToken: string;
+  mode: 'login' | 'signup';
+  accountType?: 'personal' | 'club';
+}
+
+interface AppleAuthParams {
+  identityToken: string;
+  mode: 'login' | 'signup';
+  accountType?: 'personal' | 'club';
+  fullName?: { givenName?: string; familyName?: string };
+}
+
+interface OAuthCompleteParams {
+  username?: string;
+  accountType?: 'personal' | 'club';
+  birthdate?: string;
+  activities: string[];
+}
+
 export async function register(params: RegisterParams) {
   return api.post<AuthResponse>('/auth/register', params, { auth: false });
 }
 
 export async function login(params: LoginParams) {
   return api.post<AuthResponse>('/auth/login', params, { auth: false });
+}
+
+export async function loginWithGoogle(params: GoogleAuthParams) {
+  return api.post<AuthResponse>('/auth/google', params, { auth: false });
+}
+
+export async function loginWithApple(params: AppleAuthParams) {
+  return api.post<AuthResponse>('/auth/apple', params, { auth: false });
+}
+
+export async function completeOAuthProfile(params: OAuthCompleteParams) {
+  return api.post<AuthResponse>('/auth/oauth/complete', params);
 }
 
 export async function logout(refreshToken: string) {

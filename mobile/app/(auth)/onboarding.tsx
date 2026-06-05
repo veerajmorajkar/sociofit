@@ -1,13 +1,15 @@
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import { colors, fonts, radius, shadows } from '@/constants/theme';
+import { fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function OnboardingScreen() {
+  const { theme } = useTheme();
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.bgPrimary,
+        backgroundColor: theme.bgPrimary,
         paddingHorizontal: 24,
         justifyContent: 'center',
         alignItems: 'center',
@@ -15,21 +17,21 @@ export default function OnboardingScreen() {
     >
       <Text
         style={{
-          fontFamily: fonts.display,
+          fontFamily: fonts.h1,
           fontSize: 38,
-          color: colors.textPrimary,
+          color: theme.textPrimary,
           textTransform: 'uppercase',
           letterSpacing: -1,
           textAlign: 'center',
         }}
       >
-        SocioFit<Text style={{ color: colors.tealPrimary }}>.</Text>
+        SocioFit<Text style={{ color: theme.tealPrimary }}>.</Text>
       </Text>
       <Text
         style={{
           fontFamily: fonts.body,
           fontSize: 16,
-          color: colors.textSecondary,
+          color: theme.textSecondary,
           textAlign: 'center',
           marginTop: 12,
           marginBottom: 48,
@@ -41,14 +43,14 @@ export default function OnboardingScreen() {
 
       <Pressable
         style={({ pressed }) => ({
-          backgroundColor: pressed ? colors.tealDark : colors.tealPrimary,
+          backgroundColor: pressed ? theme.tealDark : theme.tealPrimary,
           borderRadius: radius.md,
           paddingVertical: 16,
           paddingHorizontal: 48,
           marginBottom: 16,
-          ...shadows.teal,
+          ...theme.shadows.teal,
         })}
-        onPress={() => router.push('/(auth)/signup')}
+        onPress={() => router.push('/(auth)/signup-type')}
         accessibilityRole="button"
         accessibilityLabel="Get started"
       >
@@ -56,7 +58,7 @@ export default function OnboardingScreen() {
           style={{
             fontFamily: fonts.button,
             fontSize: 15,
-            color: colors.onTeal,
+            color: theme.onTeal,
             textTransform: 'uppercase',
             letterSpacing: 1,
           }}
@@ -66,11 +68,11 @@ export default function OnboardingScreen() {
       </Pressable>
 
       <Pressable
-        onPress={() => router.push('/(auth)/login')}
+        onPress={() => router.push('/(auth)/login-options')}
         accessibilityRole="button"
         accessibilityLabel="I already have an account"
       >
-        <Text style={{ fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.purpleSoft }}>
+        <Text style={{ fontFamily: fonts.bodyStrong, fontSize: 14, color: theme.purpleSoft }}>
           I already have an account
         </Text>
       </Pressable>

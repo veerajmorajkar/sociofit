@@ -17,8 +17,18 @@ function resolveGoogleMapsKeys() {
   return { ios, android };
 }
 
+function resolveGoogleOAuthKeys() {
+  return {
+    ios: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '',
+    android: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim() ?? '',
+    web: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() ?? '',
+    expo: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID?.trim() ?? '',
+  };
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const { ios: googleMapsIosApiKey, android: googleMapsAndroidApiKey } = resolveGoogleMapsKeys();
+  const googleOAuth = resolveGoogleOAuthKeys();
 
   return {
     ...config,
@@ -40,10 +50,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       },
     },
+    plugins: [
+      ...(config.plugins ?? []),
+      'expo-video',
+      'expo-web-browser',
+      'expo-apple-authentication',
+    ],
     extra: {
       ...config.extra,
       googleMapsIosApiKey,
       googleMapsAndroidApiKey,
+      googleOAuthIosClientId: googleOAuth.ios,
+      googleOAuthAndroidClientId: googleOAuth.android,
+      googleOAuthWebClientId: googleOAuth.web,
+      googleOAuthExpoClientId: googleOAuth.expo || googleOAuth.web,
     },
   };
 };
