@@ -1,101 +1,210 @@
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, FlatList, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MessageCircle } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MessageCircle, Search, Users, X } from 'lucide-react-native';
+import ConversationRow from '@/components/messages/ConversationRow';
+import PressableScale from '@/components/ui/PressableScale';
+import StaggeredListItem from '@/components/ui/StaggeredListItem';
 import { useConversations } from '@/hooks/useMessages';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
-import { colors, fonts, radius } from '@/constants/theme';
-import { timeAgo } from '@/utils/formatDate';
+import { useTealRefresh } from '@/hooks/useTealRefresh';
+import { fonts, radius, gradients } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { getConversationPresentation } from '@/constants/messaging';
 import { SCROLL_BOTTOM_PADDING } from '@/constants/layout';
 import TabBarBottomFade from '@/components/ui/TabBarBottomFade';
 import type { Conversation } from '@/types/message';
 
-function ConversationRow({ item }: { item: Conversation }) {
-  const other = item.participants[0];
-  const preview = item.lastMessage?.content ?? 'Start the conversation';
-  const name = item.title ?? other?.displayName ?? 'Chat';
-
+function matchesQuery(conv: Conversation, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const { title, subtitle } = getConversationPresentation(conv);
   return (
-    <TouchableOpacity
-      style={s.row}
-      onPress={() => router.push(`/chat/${item.id}` as never)}
-      activeOpacity={0.85}
-    >
-      <View style={s.avatar}>
-        <Text style={s.avatarText}>{(other?.displayName ?? name).charAt(0).toUpperCase()}</Text>
-      </View>
-      <View style={s.rowBody}>
-        <View style={s.rowTop}>
-          <Text style={s.name} numberOfLines={1}>
-            {name}
-          </Text>
-          {item.lastMessageAt ? <Text style={s.time}>{timeAgo(item.lastMessageAt)}</Text> : null}
-        </View>
-        <Text style={[s.preview, item.unreadCount > 0 && s.previewUnread]} numberOfLines={1}>
-          {preview}
-        </Text>
-      </View>
-      {item.unreadCount > 0 && (
-        <View style={s.badge}>
-          <Text style={s.badgeText}>{item.unreadCount > 9 ? '9+' : item.unreadCount}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    title.toLowerCase().includes(q) ||
+    (subtitle ?? '').toLowerCase().includes(q) ||
+    (conv.lastMessage?.content ?? '').toLowerCase().includes(q)
   );
 }
 
 export default function MessagesTab() {
+  const { theme, pageBg } = useTheme();
   const { data: conversations, isLoading, isError, refetch } = useConversations();
+  const { refreshListProps } = useTealRefresh(refetch);
   useRefreshOnFocus(refetch, 20_000);
+  const [query, setQuery] = useState('');
+
+  const count = conversations?.length ?? 0;
+
+  const filtered = useMemo(
+    () => (conversations ?? []).filter((c) => matchesQuery(c, query)),
+    [conversations, query],
+  );
+
+  const searching = query.trim().length > 0;
 
   return (
-    <View style={s.root}>
+    <View style={[s.root, { backgroundColor: pageBg }]}>
       <SafeAreaView edges={['top']} style={s.headerWrap}>
         <View style={s.header}>
-          <Text style={s.headerTitle}>MESSAGES</Text>
+          <View style={s.headerTextCol}>
+            <Text style={[s.headerTitle, { color: theme.textPrimary }]}>Messages</Text>
+            {!isLoading && !isError && count > 0 ? (
+              <Text style={[s.headerSubtitle, { color: theme.textMuted }]}>
+                {count} {count === 1 ? 'conversation' : 'conversations'}
+              </Text>
+            ) : null}
+          </View>
+          <PressableScale
+            onPress={() => router.push('/messages/create-group' as never)}
+            haptic
+            pressedScale={0.94}
+            style={[
+              s.newGroupBtn,
+              { borderColor: theme.surface3, backgroundColor: theme.surface1 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Create a new group chat"
+          >
+            <LinearGradient
+              colors={[...gradients.teal]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.newGroupInner}
+            >
+              <Users size={14} strokeWidth={2.5} color={theme.onTeal} />
+            </LinearGradient>
+            <Text style={[s.newGroupLabel, { color: theme.tealPrimary }]}>New group</Text>
+          </PressableScale>
+        </View>
+
+        {/* Inbox search — client-side filter, no data logic touched */}
+        {count > 0 ? (
+          <View style={s.searchWrap}>
+            <View
+              style={[
+                s.searchField,
+                { backgroundColor: theme.surface1, borderColor: theme.surface3 },
+              ]}
+            >
+              <Search size={15} strokeWidth={2} color={theme.textMuted} />
+              <TextInput
+                style={[s.searchInput, { color: theme.textPrimary }]}
+                placeholder="Search conversations"
+                placeholderTextColor={theme.textMuted}
+                value={query}
+                onChangeText={setQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                selectionColor={theme.purpleHero}
+                accessibilityLabel="Search conversations"
+              />
+              {searching ? (
+                <PressableScale
+                  onPress={() => setQuery('')}
+                  pressedScale={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  style={s.searchClear}
+                >
+                  <X size={14} strokeWidth={2.5} color={theme.textMuted} />
+                </PressableScale>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={s.headerDivider}>
+          <LinearGradient
+            colors={['transparent', 'rgba(168, 130, 255, 0.22)', 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={s.headerDividerLine}
+          />
         </View>
       </SafeAreaView>
 
       {isLoading ? (
         <View style={s.centered}>
-          <ActivityIndicator size="large" color={colors.tealPrimary} />
+          <ActivityIndicator size="large" color={theme.tealPrimary} />
         </View>
       ) : isError ? (
         <View style={s.centered}>
-          <Text style={s.emptyTitle}>COULDN'T LOAD MESSAGES</Text>
-          <TouchableOpacity onPress={() => void refetch()} style={s.retryBtn}>
-            <Text style={s.retryText}>RETRY</Text>
-          </TouchableOpacity>
+          <Text style={[s.emptyTitle, { color: theme.textPrimary }]}>Couldn't load messages</Text>
+          <PressableScale
+            onPress={() => void refetch()}
+            haptic
+            style={[s.primaryBtn, { backgroundColor: theme.tealPrimary, ...theme.shadows.teal }]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading messages"
+          >
+            <Text style={[s.primaryBtnText, { color: theme.onTeal }]}>Retry</Text>
+          </PressableScale>
         </View>
       ) : !conversations?.length ? (
         <View style={s.centered}>
-          <MessageCircle size={44} strokeWidth={1.5} color={colors.textMuted} />
-          <Text style={s.emptyTitle}>NO CONVERSATIONS YET</Text>
-          <Text style={s.emptyBody}>
-            Message someone from their profile after you connect with them
+          <View style={s.emptyIconRing}>
+            <LinearGradient
+              colors={[...gradients.storyRing]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.emptyIconRingGradient}
+            >
+              <View style={[s.emptyIconWrap, { backgroundColor: theme.insetWell }]}>
+                <MessageCircle size={34} strokeWidth={1.5} color={theme.purpleSoft} />
+              </View>
+            </LinearGradient>
+          </View>
+          <Text style={[s.emptyTitle, { color: theme.textPrimary }]}>No conversations yet</Text>
+          <Text style={[s.emptyBody, { color: theme.textMuted }]}>
+            DM someone from their profile, join an event discussion, or start a group chat
           </Text>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/search' as never)}
-            style={s.retryBtn}
+          <PressableScale
+            onPress={() => router.push('/messages/create-group' as never)}
+            haptic
+            style={[s.primaryBtn, { backgroundColor: theme.tealPrimary, ...theme.shadows.teal }]}
+            accessibilityRole="button"
+            accessibilityLabel="Create a group chat"
           >
-            <Text style={s.retryText}>FIND PEOPLE</Text>
-          </TouchableOpacity>
+            <Text style={[s.primaryBtnText, { color: theme.onTeal }]}>Create a group</Text>
+          </PressableScale>
+          <PressableScale
+            onPress={() => router.push('/(tabs)/search' as never)}
+            style={[s.secondaryBtn, { borderColor: theme.surface3 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Find athletes to message"
+          >
+            <Text style={[s.secondaryBtnText, { color: theme.purpleSoft }]}>Find athletes</Text>
+          </PressableScale>
         </View>
       ) : (
-        <View style={{ flex: 1 }}>
+        <View style={s.listFrame}>
           <FlatList
-            data={conversations}
+            data={filtered}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <ConversationRow item={item} />}
-            contentContainerStyle={{ paddingBottom: SCROLL_BOTTOM_PADDING }}
+            renderItem={({ item, index }) =>
+              searching ? (
+                <ConversationRow item={item} />
+              ) : (
+                <StaggeredListItem index={index}>
+                  <ConversationRow item={item} />
+                </StaggeredListItem>
+              )
+            }
+            {...refreshListProps}
+            contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            ListEmptyComponent={
+              <View style={s.noResults}>
+                <Text style={[s.noResultsText, { color: theme.textMuted }]}>
+                  No conversations match "{query.trim()}"
+                </Text>
+              </View>
+            }
           />
           <TabBarBottomFade />
         </View>
@@ -105,20 +214,87 @@ export default function MessagesTab() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bgPrimary },
-  headerWrap: { backgroundColor: colors.bgPrimary },
+  root: { flex: 1 },
+  headerWrap: { backgroundColor: 'transparent' },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surface3,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
+  headerTextCol: { gap: 3 },
   headerTitle: {
     fontFamily: fonts.h1,
     fontSize: 22,
-    color: colors.textPrimary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
+  },
+  headerSubtitle: {
+    fontFamily: fonts.caption,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  headerDivider: {
+    paddingHorizontal: 28,
+    paddingBottom: 4,
+  },
+  headerDividerLine: {
+    height: 1,
+    borderRadius: radius.full,
+  },
+  newGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 38,
+    paddingLeft: 6,
+    paddingRight: 14,
+    borderRadius: 19,
+    borderWidth: 1,
+  },
+  newGroupInner: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newGroupLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
+  searchWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  searchField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 40,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listFrame: { flex: 1 },
+  listContent: {
+    paddingTop: 10,
+    paddingBottom: SCROLL_BOTTOM_PADDING,
   },
   centered: {
     flex: 1,
@@ -126,63 +302,68 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surface3,
+  emptyIconRing: {
+    borderRadius: 40,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.surface2,
+  emptyIconRingGradient: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.purpleHero,
   },
-  avatarText: { fontFamily: fonts.h2, fontSize: 18, color: colors.purpleSoft },
-  rowBody: { flex: 1 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  name: { fontFamily: fonts.bodyStrong, fontSize: 15, color: colors.textPrimary, flex: 1 },
-  time: { fontFamily: fonts.caption, fontSize: 11, color: colors.textMuted },
-  preview: { fontFamily: fonts.body, fontSize: 13, color: colors.textSecondary, marginTop: 3 },
-  previewUnread: { color: colors.textPrimary, fontFamily: fonts.bodyStrong },
-  badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.tealPrimary,
+  emptyIconWrap: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    overflow: 'hidden',
   },
-  badgeText: { fontFamily: fonts.label, fontSize: 10, color: colors.onTeal },
   emptyTitle: {
     fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
+    fontSize: 17,
     marginTop: 16,
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   emptyBody: {
     fontFamily: fonts.body,
     fontSize: 14,
-    color: colors.textMuted,
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 22,
   },
-  retryBtn: {
-    marginTop: 20,
-    backgroundColor: colors.tealPrimary,
+  primaryBtn: {
+    marginTop: 22,
+    paddingHorizontal: 26,
+    paddingVertical: 13,
+    borderRadius: radius.full,
+  },
+  primaryBtnText: {
+    fontFamily: fonts.button,
+    fontSize: 14,
+    letterSpacing: 0.3,
+  },
+  secondaryBtn: {
+    marginTop: 12,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
+    borderWidth: 1,
   },
-  retryText: { fontFamily: fonts.button, color: colors.onTeal, letterSpacing: 0.5 },
+  secondaryBtnText: {
+    fontFamily: fonts.button,
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  noResults: {
+    paddingTop: 60,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    textAlign: 'center',
+  },
 });

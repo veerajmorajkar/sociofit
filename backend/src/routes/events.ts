@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
+import { requireEmailVerified } from '../middleware/requireVerified.js';
 import { createEventSchema, updateEventSchema, eventQuerySchema } from '../schemas/event.schema.js';
 import {
   getEvents,
@@ -27,7 +28,7 @@ export function eventRoutes(app: FastifyInstance) {
 
   // ── My joined events (upcoming + past) ─────────────────────
   app.get('/me/joined', { preHandler: authenticate }, async (request, reply) => {
-    const result = await getJoinedEvents(request.user!.userId);
+    const result = await getJoinedEvents(request.user!.userId, request.user!.userId);
     return sendSuccess(reply, result);
   });
 
@@ -47,15 +48,20 @@ export function eventRoutes(app: FastifyInstance) {
   // ── Joined events by user (profile activity) ─────────────────
   app.get('/user/:userId/joined', { preHandler: authenticate }, async (request, reply) => {
     const { userId } = request.params as { userId: string };
-    const result = await getJoinedEvents(userId);
+    const result = await getJoinedEvents(userId, request.user!.userId);
     return sendSuccess(reply, result);
   });
 
   // ── Create Event ──────────────────────────────────────────
-  app.post('/', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticate, requireEmailVerified] }, async (request, reply) => {
     const body = createEventSchema.parse(request.body);
-    const event = await createEvent(request.user!.userId, body);
-    return sendSuccess(reply, event, 201);
+    try {
+      const event = await createEvent(request.user!.userId, body);
+      return sendSuccess(reply, event, 201);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create event';
+      return sendError(reply, message, 400);
+    }
   });
 
   // ── Get Event ─────────────────────────────────────────────

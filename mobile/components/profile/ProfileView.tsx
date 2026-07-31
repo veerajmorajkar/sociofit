@@ -10,16 +10,27 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Settings, Link as LinkIcon, ChevronLeft, ArrowLeftRight } from 'lucide-react-native';
+import {
+  Settings,
+  Link as LinkIcon,
+  ChevronLeft,
+  ArrowLeftRight,
+  Megaphone,
+} from 'lucide-react-native';
+import ContentActionsMenu from '@/components/moderation/ContentActionsMenu';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useJoinedEvents, useHostedEvents } from '@/hooks/useEvents';
 import UserPostsGrid from '@/components/profile/UserPostsGrid';
 import ProfileEventsTab from '@/components/profile/ProfileEventsTab';
 import { SCROLL_BOTTOM_PADDING } from '@/constants/layout';
-import { colors, fonts } from '@/constants/theme';
+import { fonts } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { activityLabel, activityIcon } from '@/constants/activities';
 import UserAvatar from '@/components/ui/UserAvatar';
+import AccountTypeIcon from '@/components/auth/AccountTypeIcon';
+import type { ClubAnnouncementChannel } from '@/types/message';
+import type { AccountTypeValue } from '@/constants/accountType';
 
 const TABS = ['POSTS', 'EVENTS'] as const;
 
@@ -44,6 +55,10 @@ export interface ProfileViewProps {
   onToggleFollow?: () => void;
   onMessage?: () => void;
   messageLoading?: boolean;
+  accountType?: 'personal' | 'club';
+  announcementChannel?: ClubAnnouncementChannel | null;
+  onAnnouncementPress?: () => void;
+  announcementLoading?: boolean;
   contentPaddingBottom?: number;
 }
 
@@ -66,8 +81,13 @@ export default function ProfileView({
   onToggleFollow,
   onMessage,
   messageLoading,
+  accountType = 'personal',
+  announcementChannel,
+  onAnnouncementPress,
+  announcementLoading,
   contentPaddingBottom = SCROLL_BOTTOM_PADDING,
 }: ProfileViewProps) {
+  const { theme, pageBg } = useTheme();
   const eventsUserId = variant === 'visitor' ? userId : undefined;
   const { data: joinedEvents } = useJoinedEvents(eventsUserId);
   const { data: hostedEvents } = useHostedEvents(eventsUserId);
@@ -91,18 +111,21 @@ export default function ProfileView({
   const organisedCount = (hostedEvents?.upcoming.length ?? 0) + (hostedEvents?.past.length ?? 0);
 
   const openConnections = (mode: 'followers' | 'following') => {
-    router.push(`/profile/connections?userId=${userId}&mode=${mode}` as never);
+    const q = new URLSearchParams({ userId, mode, name: displayName });
+    router.push(`/profile/connections?${q.toString()}` as never);
   };
 
   const linkDisplay = websiteUrl?.trim() || `fitsocial.app/${username}`;
-
   const showVisitorActions = variant === 'visitor' && onToggleFollow && onMessage;
+  const showAnnouncementCta =
+    variant === 'visitor' && accountType === 'club' && announcementChannel && onAnnouncementPress;
 
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: contentPaddingBottom }}
     >
+      {/* ─── Hero gradient header — UNCHANGED (purple gradient looks stunning on both light and dark) ─── */}
       <LinearGradient
         colors={['#2A1570', '#5B2ECC', '#6D3AE8']}
         locations={[0, 0.65, 1]}
@@ -120,7 +143,7 @@ export default function ProfileView({
                 accessibilityLabel="Go back"
                 accessibilityRole="button"
               >
-                <ChevronLeft size={24} strokeWidth={2} color={colors.textPrimary} />
+                <ChevronLeft size={24} strokeWidth={2} color="#FFFFFF" />
               </TouchableOpacity>
             ) : (
               <View style={s.topRowSpacer} />
@@ -133,26 +156,32 @@ export default function ProfileView({
                 accessibilityLabel="Settings"
                 accessibilityRole="button"
               >
-                <Settings size={20} strokeWidth={2} color={colors.textPrimary} />
+                <Settings size={20} strokeWidth={2} color="#FFFFFF" />
               </TouchableOpacity>
+            ) : variant === 'visitor' ? (
+              <View style={s.menuBtnWrap}>
+                <ContentActionsMenu
+                  variant="nav"
+                  iconColor="#FFFFFF"
+                  targetType="user"
+                  targetId={userId}
+                  targetTitle={displayName}
+                  onHidden={() => router.back()}
+                />
+              </View>
             ) : (
               <View style={s.topRowSpacer} />
             )}
           </View>
 
           <View style={[s.identityRow, showVisitorActions && s.identityRowVisitor]}>
-            <View style={s.avatar}>
-              {isLoading && !avatarUrl ? (
-                <ActivityIndicator size="small" color={colors.tealPrimary} />
-              ) : (
-                <UserAvatar name={displayName} avatarUrl={avatarUrl} size={76} />
-              )}
-            </View>
-
             <View style={s.identityInfo}>
-              <Text style={s.displayName} numberOfLines={1}>
-                {displayName}
-              </Text>
+              <View style={s.displayNameRow}>
+                <Text style={s.displayName} numberOfLines={1}>
+                  {displayName}
+                </Text>
+                <AccountTypeIcon type={accountType as AccountTypeValue} size={22} selected />
+              </View>
               <View style={s.usernameRow}>
                 <Text style={s.handle} numberOfLines={1}>
                   @{username}
@@ -209,6 +238,14 @@ export default function ProfileView({
                 </View>
               )}
             </View>
+
+            <View style={s.avatar}>
+              {isLoading && !avatarUrl ? (
+                <ActivityIndicator size="small" color="#00C8AC" />
+              ) : (
+                <UserAvatar name={displayName} avatarUrl={avatarUrl} size={76} />
+              )}
+            </View>
           </View>
 
           <View style={s.detailsBlock}>
@@ -221,11 +258,47 @@ export default function ProfileView({
             ) : null}
 
             <TouchableOpacity style={s.linkRow} activeOpacity={0.7}>
-              <LinkIcon size={13} strokeWidth={2} color={colors.tealPrimary} />
+              <LinkIcon size={13} strokeWidth={2} color="#00C8AC" />
               <Text style={s.linkText} numberOfLines={1}>
                 {linkDisplay}
               </Text>
             </TouchableOpacity>
+
+            {showAnnouncementCta ? (
+              <TouchableOpacity
+                style={[s.announcementBtn, !isFollowing && s.announcementBtnDisabled]}
+                onPress={isFollowing ? onAnnouncementPress : undefined}
+                disabled={!isFollowing || announcementLoading}
+                activeOpacity={isFollowing ? 0.8 : 1}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !isFollowing }}
+                accessibilityLabel={
+                  isFollowing ? 'View club announcements' : 'Follow the club to view announcements'
+                }
+              >
+                {announcementLoading ? (
+                  <ActivityIndicator size="small" color="#E8C96A" />
+                ) : (
+                  <>
+                    <Megaphone
+                      size={15}
+                      strokeWidth={2}
+                      color={isFollowing ? '#E8C96A' : 'rgba(255,255,255,0.4)'}
+                    />
+                    <Text
+                      style={[s.announcementBtnText, !isFollowing && s.announcementBtnTextDisabled]}
+                    >
+                      {isFollowing ? 'View announcements' : 'Follow the club to view announcements'}
+                    </Text>
+                    {isFollowing ? (
+                      <Text style={s.announcementCount}>
+                        {announcementChannel.subscriberCount} subscribed
+                      </Text>
+                    ) : null}
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
 
             {activities.length > 0 && (
               <View style={s.tagsRow}>
@@ -258,9 +331,10 @@ export default function ProfileView({
         </SafeAreaView>
       </LinearGradient>
 
-      <View style={s.contentSection}>
+      {/* ─── Below-hero content section — uses dynamic theme colors ─── */}
+      <View style={[s.contentSection, { backgroundColor: pageBg }]}>
         <View
-          style={s.profileTabsRow}
+          style={[s.profileTabsRow, { borderBottomColor: theme.surface3 }]}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
             const slot = w / TABS.length;
@@ -275,6 +349,7 @@ export default function ProfileView({
               style={[
                 s.profileTabUnderline,
                 {
+                  backgroundColor: theme.tealPrimary,
                   width: tabSlotWidth,
                   transform: [{ translateX: tabUnderlineX }],
                 },
@@ -294,7 +369,17 @@ export default function ProfileView({
                 accessibilityState={{ selected }}
               >
                 <View style={s.profileTabInner}>
-                  <Text style={[s.profileTabLabel, selected && s.profileTabLabelActive]}>
+                  <Text
+                    style={[
+                      s.profileTabLabel,
+                      { color: theme.textMuted },
+                      selected && {
+                        color: theme.textPrimary,
+                        fontFamily: fonts.label,
+                        letterSpacing: 1.3,
+                      },
+                    ]}
+                  >
                     {isEventsTab && selected
                       ? eventMode === 'organised'
                         ? 'ORGANISED EVENTS'
@@ -312,7 +397,7 @@ export default function ProfileView({
                       accessibilityLabel="Switch events view"
                       accessibilityRole="button"
                     >
-                      <ArrowLeftRight size={13} strokeWidth={2} color="rgba(255,255,255,0.5)" />
+                      <ArrowLeftRight size={13} strokeWidth={2} color={theme.textMuted} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -338,7 +423,7 @@ const s = StyleSheet.create({
     paddingBottom: 24,
     ...Platform.select({
       ios: {
-        shadowColor: colors.purpleDeep,
+        shadowColor: '#3B1F8C',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.5,
         shadowRadius: 20,
@@ -361,21 +446,16 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: -8,
   },
-  settingsBtn: {
+  settingsBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  menuBtnWrap: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: -4,
   },
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 14,
-  },
-  identityRowVisitor: {
-    alignItems: 'flex-start',
-  },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 14 },
+  identityRowVisitor: { alignItems: 'flex-start' },
   avatar: {
     width: 76,
     height: 76,
@@ -384,50 +464,25 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    flexShrink: 0,
   },
-  identityInfo: { flex: 1, gap: 6 },
+  identityInfo: { flex: 1, gap: 6, minWidth: 0 },
+  displayNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
   displayName: {
     fontFamily: fonts.h1,
     fontSize: 24,
     color: '#FFFFFF',
     letterSpacing: -0.5,
     lineHeight: 28,
+    flexShrink: 1,
   },
-  usernameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  handle: {
-    fontFamily: fonts.caption,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  socialDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
+  usernameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  handle: { fontFamily: fonts.caption, fontSize: 14, color: 'rgba(255,255,255,0.7)' },
+  socialDot: { width: 3, height: 3, borderRadius: 9999, backgroundColor: 'rgba(255,255,255,0.3)' },
   socialNum: { flexDirection: 'row', alignItems: 'baseline' },
-  socialNumBold: {
-    fontFamily: fonts.stat,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.95)',
-  },
-  socialLabel: {
-    fontFamily: fonts.caption,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
-  },
-
-  visitorActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-  },
+  socialNumBold: { fontFamily: fonts.stat, fontSize: 14, color: 'rgba(255,255,255,0.95)' },
+  socialLabel: { fontFamily: fonts.caption, fontSize: 13, color: 'rgba(255,255,255,0.65)' },
+  visitorActionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   glassPill: {
     flex: 1,
     minHeight: 36,
@@ -436,32 +491,23 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.28)',
+    borderColor: 'rgba(255,255,255,0.28)',
   },
   glassPillHighlight: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderColor: 'rgba(255, 255, 255, 0.42)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.42)',
   },
   glassPillText: {
     fontFamily: fonts.bodyStrong,
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.95)',
+    color: 'rgba(255,255,255,0.95)',
     letterSpacing: 0.15,
   },
-  glassPillTextHighlight: {
-    fontFamily: fonts.button,
-    color: '#FFFFFF',
-  },
-
+  glassPillTextHighlight: { fontFamily: fonts.button, color: '#FFFFFF' },
   detailsBlock: { gap: 6, marginBottom: 16 },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -469,12 +515,12 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 9999,
-    backgroundColor: 'rgba(0, 0, 0, 0.42)',
+    backgroundColor: 'rgba(0,0,0,0.42)',
     borderWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    borderLeftColor: 'rgba(255, 255, 255, 0.08)',
-    borderRightColor: 'rgba(0, 0, 0, 0.55)',
-    borderBottomColor: 'rgba(0, 0, 0, 0.55)',
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderLeftColor: 'rgba(255,255,255,0.08)',
+    borderRightColor: 'rgba(0,0,0,0.55)',
+    borderBottomColor: 'rgba(0,0,0,0.55)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -489,15 +535,10 @@ const s = StyleSheet.create({
   tagLabel: {
     fontFamily: fonts.caption,
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.88)',
+    color: 'rgba(255,255,255,0.88)',
     letterSpacing: 0.1,
   },
-  bio: {
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.9)',
-    lineHeight: 21,
-  },
+  bio: { fontFamily: fonts.body, fontSize: 15, color: 'rgba(255,255,255,0.9)', lineHeight: 21 },
   bioPlaceholder: {
     fontFamily: fonts.body,
     fontSize: 15,
@@ -505,31 +546,42 @@ const s = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 21,
   },
-  linkRow: {
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 2 },
+  linkText: { fontFamily: fonts.caption, fontSize: 13, color: '#00C8AC' },
+  announcementBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingTop: 2,
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: 'rgba(201,168,76,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.28)',
   },
-  linkText: {
-    fontFamily: fonts.caption,
-    fontSize: 13,
-    color: colors.tealPrimary,
+  announcementBtnDisabled: {
+    backgroundColor: 'rgba(31,31,56,0.45)',
+    borderColor: 'rgba(100,92,150,0.22)',
+    opacity: 0.85,
   },
+  announcementBtnText: { flex: 1, fontFamily: fonts.bodyStrong, fontSize: 13, color: '#E8C96A' },
+  announcementBtnTextDisabled: { fontFamily: fonts.body, color: 'rgba(255,255,255,0.4)' },
+  announcementCount: { fontFamily: fonts.caption, fontSize: 11, color: 'rgba(255,255,255,0.5)' },
   statPanel: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: 'rgba(12, 5, 40, 0.72)',
+    backgroundColor: 'rgba(12,5,40,0.72)',
     borderRadius: 20,
     overflow: 'hidden',
     borderTopWidth: 1.5,
     borderLeftWidth: 1.5,
     borderRightWidth: 1,
     borderBottomWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
-    borderLeftColor: 'rgba(255, 255, 255, 0.06)',
-    borderRightColor: 'rgba(0, 0, 0, 0.7)',
-    borderBottomColor: 'rgba(0, 0, 0, 0.7)',
+    borderTopColor: 'rgba(255,255,255,0.06)',
+    borderLeftColor: 'rgba(255,255,255,0.06)',
+    borderRightColor: 'rgba(0,0,0,0.7)',
+    borderBottomColor: 'rgba(0,0,0,0.7)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -540,16 +592,8 @@ const s = StyleSheet.create({
       android: { elevation: 6 },
     }),
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 4,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
+  statItem: { flex: 1, alignItems: 'center', paddingVertical: 13, paddingHorizontal: 4 },
+  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
   statNum: {
     fontFamily: fonts.stat,
     fontSize: 20,
@@ -565,48 +609,10 @@ const s = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 11,
   },
-
-  contentSection: {
-    backgroundColor: colors.bgPrimary,
-    paddingHorizontal: 16,
-    marginBottom: 4,
-  },
-  profileTabsRow: {
-    flexDirection: 'row',
-    position: 'relative',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(42, 42, 72, 0.35)',
-  },
-  profileTabUnderline: {
-    position: 'absolute',
-    left: 0,
-    bottom: 0,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-  },
-  profileTab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingTop: 13,
-    paddingBottom: 12,
-    zIndex: 1,
-  },
-  profileTabInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  profileTabLabel: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.textMuted,
-    letterSpacing: 0.6,
-  },
-  profileTabLabelActive: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.textPrimary,
-    letterSpacing: 1.3,
-  },
+  contentSection: { paddingHorizontal: 16, marginBottom: 4 },
+  profileTabsRow: { flexDirection: 'row', position: 'relative', borderBottomWidth: 1 },
+  profileTabUnderline: { position: 'absolute', left: 0, bottom: 0, height: 2, borderRadius: 1 },
+  profileTab: { flex: 1, alignItems: 'center', paddingTop: 13, paddingBottom: 12, zIndex: 1 },
+  profileTabInner: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  profileTabLabel: { fontFamily: fonts.caption, fontSize: 12, letterSpacing: 0.6 },
 });

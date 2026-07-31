@@ -2,7 +2,6 @@ import {
   View,
   Text,
   FlatList,
-  RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
@@ -17,18 +16,22 @@ import {
 import { useState, useCallback, useRef, type RefObject } from 'react';
 import { router } from 'expo-router';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { useTealRefresh } from '@/hooks/useTealRefresh';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, CalendarDays, Users, Plus, Search, X } from 'lucide-react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import TabBarBottomFade from '@/components/ui/TabBarBottomFade';
 import { useEvents, useCategories, useRsvpEvent } from '@/hooks/useEvents';
-import { colors, fonts, radius, eventGradient } from '@/constants/theme';
+import { fonts, radius, eventGradient } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { SCROLL_BOTTOM_PADDING } from '@/constants/layout';
+import AccountTypeIcon from '@/components/auth/AccountTypeIcon';
+import { accountTypeBadgeLabel } from '@/constants/accountType';
 import { formatEventDate, formatPrice } from '@/utils/formatDate';
 import type { Event } from '@/types/event';
 
-// Static fallback category filter tabs shown before API loads
 const STATIC_FILTERS = [
   { slug: 'all', name: 'ALL' },
   { slug: 'running', name: 'RUNNING' },
@@ -40,7 +43,7 @@ const STATIC_FILTERS = [
 ];
 
 const SEARCH_BAR_HEIGHT = 44;
-const SEARCH_GAP = 10; // matches navBar paddingBottom — equal above bar & below bar → filters
+const SEARCH_GAP = 10;
 const SEARCH_PANEL_HEIGHT = SEARCH_GAP + SEARCH_BAR_HEIGHT + SEARCH_GAP;
 
 type FilterTab = { slug: string; name: string };
@@ -68,6 +71,7 @@ function EventsTopChrome({
   activeCategory: string;
   onCategoryChange: (slug: string) => void;
 }) {
+  const { theme, mode, pageBg } = useTheme();
   const searchHeight = searchProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [0, SEARCH_PANEL_HEIGHT],
@@ -79,7 +83,7 @@ function EventsTopChrome({
   const isInteractive = searchExpanded;
 
   return (
-    <SafeAreaView edges={['top']} style={s.navSafe}>
+    <SafeAreaView edges={['top']} style={{ backgroundColor: pageBg }}>
       <View style={s.navBar}>
         <Pressable
           onPress={onToggleSearch}
@@ -91,22 +95,36 @@ function EventsTopChrome({
           <Search
             size={22}
             strokeWidth={1.75}
-            color={searchExpanded ? colors.tealPrimary : colors.textPrimary}
+            color={searchExpanded ? theme.tealPrimary : theme.textPrimary}
           />
         </Pressable>
 
         <View style={s.navTitleWrap}>
-          <Text style={s.navTitle}>EVENTS</Text>
+          <Text style={[s.navTitle, { color: theme.textPrimary }]}>Events</Text>
         </View>
 
         <View style={s.navSide}>
           <TouchableOpacity
             onPress={() => router.push('/event/create' as never)}
-            style={s.headerCreateBtn}
+            style={[
+              s.headerCreateBtn,
+              {
+                backgroundColor: theme.tealPrimary,
+                ...Platform.select({
+                  ios: {
+                    shadowColor: theme.tealPrimary,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.28,
+                    shadowRadius: 8,
+                  },
+                  android: { elevation: 4 },
+                }),
+              },
+            ]}
             activeOpacity={0.8}
             accessibilityLabel="Create event"
           >
-            <Plus size={18} strokeWidth={2.5} color={colors.onTeal} />
+            <Plus size={18} strokeWidth={2.5} color={theme.onTeal} />
           </TouchableOpacity>
         </View>
       </View>
@@ -117,13 +135,15 @@ function EventsTopChrome({
         collapsable={false}
       >
         <Animated.View style={[s.searchPanelInner, { opacity: searchOpacity }]}>
-          <View style={s.searchBar}>
-            <Search size={18} strokeWidth={1.75} color={colors.textMuted} />
+          <View
+            style={[s.searchBar, { backgroundColor: theme.surface1, borderColor: theme.surface3 }]}
+          >
+            <Search size={18} strokeWidth={1.75} color={theme.textMuted} />
             <TextInput
               ref={searchInputRef}
-              style={s.searchInput}
+              style={[s.searchInput, { color: theme.textPrimary }]}
               placeholder="Search events…"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={theme.textMuted}
               value={searchQuery}
               onChangeText={onSearchQueryChange}
               returnKeyType="search"
@@ -138,16 +158,16 @@ function EventsTopChrome({
                 hitSlop={8}
                 accessibilityLabel="Clear search"
               >
-                <X size={18} strokeWidth={2} color={colors.textMuted} />
+                <X size={18} strokeWidth={2} color={theme.textMuted} />
               </Pressable>
             ) : null}
             <Pressable
               onPress={onCloseSearch}
               hitSlop={8}
-              style={s.searchCloseBtn}
+              style={[s.searchCloseBtn, { borderLeftColor: theme.surface3 }]}
               accessibilityLabel="Close search"
             >
-              <X size={20} strokeWidth={2} color={colors.textSecondary} />
+              <X size={20} strokeWidth={2} color={theme.textSecondary} />
             </Pressable>
           </View>
         </Animated.View>
@@ -159,25 +179,56 @@ function EventsTopChrome({
         contentContainerStyle={s.filterBar}
         style={s.filterBarWrapper}
       >
-        {filterTabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.slug}
-            onPress={() => onCategoryChange(tab.slug)}
-            style={[s.filterChip, activeCategory === tab.slug && s.filterChipActive]}
-            activeOpacity={0.75}
-          >
-            <Text style={[s.filterChipText, activeCategory === tab.slug && s.filterChipTextActive]}>
-              {tab.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {filterTabs.map((tab) => {
+          const isActive = activeCategory === tab.slug;
+          return (
+            <TouchableOpacity
+              key={tab.slug}
+              onPress={() => onCategoryChange(tab.slug)}
+              style={[
+                s.filterChip,
+                {
+                  backgroundColor: isActive
+                    ? theme.tealPrimary
+                    : mode === 'light'
+                      ? theme.surface2
+                      : theme.surface,
+                  borderColor: isActive ? theme.tealPrimary : theme.border,
+                  ...(Platform.OS === 'ios'
+                    ? isActive
+                      ? {
+                          shadowColor: theme.tealPrimary,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.28,
+                          shadowRadius: 8,
+                        }
+                      : {
+                          shadowColor: theme.shadows.sm.shadowColor,
+                          shadowOffset: theme.shadows.sm.shadowOffset,
+                          shadowOpacity: theme.shadows.sm.shadowOpacity,
+                          shadowRadius: theme.shadows.sm.shadowRadius,
+                        }
+                    : { elevation: isActive ? 4 : theme.shadows.sm.elevation }),
+                },
+              ]}
+              activeOpacity={0.75}
+            >
+              <Text
+                style={[s.filterChipText, { color: isActive ? theme.onTeal : theme.textMuted }]}
+              >
+                {tab.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-// ── Event Discovery Card ─────────────────────────────────────
 function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => void }) {
+  const { theme, mode } = useTheme();
+  const cardBg = mode === 'light' ? theme.surface2 : theme.surface1;
   const isFree = !event.priceInr || event.priceInr === 0;
   const isClubOrganiser = event.organiser.accountType === 'club';
   const isLive = event.status === 'live';
@@ -186,101 +237,150 @@ function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => voi
     <TouchableOpacity
       onPress={() => router.push(`/event/${event.id}` as never)}
       activeOpacity={0.9}
-      style={s.card}
+      style={[
+        s.card,
+        {
+          backgroundColor: cardBg,
+          ...(mode === 'light' && { borderWidth: 1, borderColor: theme.border }),
+          ...Platform.select({
+            ios: {
+              shadowColor: theme.shadows.md.shadowColor,
+              shadowOffset: theme.shadows.md.shadowOffset,
+              shadowOpacity: theme.shadows.md.shadowOpacity,
+              shadowRadius: theme.shadows.md.shadowRadius,
+            },
+            android: { elevation: theme.shadows.md.elevation },
+          }),
+        },
+      ]}
       accessibilityLabel={event.title}
     >
       <View style={s.cardBadgeRow} pointerEvents="none">
         <View
           style={[
             s.organiserTypeBadge,
-            isClubOrganiser ? s.organiserTypeClub : s.organiserTypePerson,
+            isClubOrganiser
+              ? {
+                  backgroundColor: 'rgba(91,46,204,0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(91,46,204,0.35)',
+                }
+              : {
+                  backgroundColor: 'rgba(0,200,172,0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(0,200,172,0.35)',
+                },
           ]}
         >
           <Text
             style={[
               s.organiserTypeText,
-              isClubOrganiser ? s.organiserTypeTextClub : s.organiserTypeTextPerson,
+              { color: isClubOrganiser ? theme.purpleBrand : theme.tealPrimary },
             ]}
           >
-            {isClubOrganiser ? 'CLUB' : 'PERSON'}
+            {accountTypeBadgeLabel(isClubOrganiser ? 'club' : 'personal')}
           </Text>
         </View>
         {isLive ? (
-          <View style={s.liveBadge}>
+          <View style={[s.liveBadge, { backgroundColor: theme.live }]}>
             <View style={s.liveDot} />
             <Text style={s.liveBadgeText}>LIVE</Text>
           </View>
         ) : null}
       </View>
 
-      {/* Cover image area — category gradient */}
       <View style={s.coverArea}>
-        <LinearGradient
-          colors={eventGradient(event.category?.slug ?? event.category?.name)}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.coverPlaceholder}
-        />
+        {event.coverImageUrl ? (
+          <Image
+            source={{ uri: event.coverImageUrl }}
+            style={s.coverImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
+        ) : (
+          <LinearGradient
+            colors={eventGradient(event.category?.slug ?? event.category?.name)}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.coverPlaceholder}
+          />
+        )}
         {!isFree && (
-          <View style={s.priceBadge}>
-            <Text style={s.priceBadgeText}>{formatPrice(event.priceInr)}</Text>
+          <View
+            style={[
+              s.priceBadge,
+              { backgroundColor: mode === 'light' ? theme.surface1 : theme.surface2 },
+            ]}
+          >
+            <Text style={[s.priceBadgeText, { color: theme.textSecondary }]}>
+              {formatPrice(event.priceInr)}
+            </Text>
           </View>
         )}
         {isFree && (
-          <View style={[s.priceBadge, s.freeBadge]}>
-            <Text style={[s.priceBadgeText, s.freeBadgeText]}>FREE</Text>
+          <View style={[s.priceBadge, { backgroundColor: theme.tealPrimary }]}>
+            <Text style={[s.priceBadgeText, { color: theme.onTeal }]}>FREE</Text>
           </View>
         )}
       </View>
 
-      {/* Content */}
       <View style={s.cardContent}>
-        {/* Category pill */}
         {event.category && (
-          <View style={s.categoryPill}>
-            <Text style={s.categoryPillText}>{event.category.name.toUpperCase()}</Text>
+          <View style={[s.categoryPill, { backgroundColor: theme.surface3 }]}>
+            <Text style={[s.categoryPillText, { color: theme.textMuted }]}>
+              {event.category.name.toUpperCase()}
+            </Text>
           </View>
         )}
 
-        {/* Title */}
-        <Text style={s.title} numberOfLines={2}>
+        <Text style={[s.title, { color: theme.text1 }]} numberOfLines={2}>
           {event.title.toUpperCase()}
         </Text>
 
-        {/* Organiser */}
         <View style={s.organiserRow}>
-          <View style={[s.organiserAvatar, isClubOrganiser && s.organiserAvatarClub]}>
-            <Text style={s.organiserAvatarText}>
+          <View
+            style={[
+              s.organiserAvatar,
+              { backgroundColor: theme.surface3, borderColor: theme.tealPrimary },
+              isClubOrganiser && { borderRadius: 6, borderColor: theme.purpleHero },
+            ]}
+          >
+            <Text style={[s.organiserAvatarText, { color: theme.text2 }]}>
               {event.organiser.displayName.charAt(0).toUpperCase()}
             </Text>
           </View>
-          <Text style={s.organiserName} numberOfLines={1}>
+          <Text style={[s.organiserName, { color: theme.text2 }]} numberOfLines={1}>
             {event.organiser.displayName.toUpperCase()}
           </Text>
-          {event.organiser.isVerified && <View style={s.verifiedDot} />}
+          <AccountTypeIcon
+            type={event.organiser.accountType === 'club' ? 'club' : 'personal'}
+            size={14}
+            selected
+          />
         </View>
 
-        {/* Date & Location */}
         <View style={s.metaRow}>
           <View style={s.metaItem}>
-            <CalendarDays size={13} strokeWidth={1.75} color={colors.text3} />
-            <Text style={s.metaText}>{formatEventDate(event.startTime)}</Text>
+            <CalendarDays size={13} strokeWidth={1.75} color={theme.text3} />
+            <Text style={[s.metaText, { color: theme.textMuted }]}>
+              {formatEventDate(event.startTime)}
+            </Text>
           </View>
-          <View style={s.metaSep} />
+          <View style={[s.metaSep, { backgroundColor: theme.border }]} />
           <View style={s.metaItem}>
-            <MapPin size={13} strokeWidth={1.75} color={colors.text3} />
-            <Text style={s.metaText} numberOfLines={1}>
+            <MapPin size={13} strokeWidth={1.75} color={theme.text3} />
+            <Text style={[s.metaText, { color: theme.textMuted }]} numberOfLines={1}>
               {event.locationName}
             </Text>
           </View>
         </View>
 
-        {/* Footer: going count + RSVP */}
         <View style={s.cardFooter}>
           <View style={s.goingRow}>
-            <Users size={13} strokeWidth={1.75} color={colors.sageLight} />
-            <Text style={s.goingText}>
-              {event.participantCount ?? 0} going
+            <Users size={13} strokeWidth={1.75} color={theme.purpleSoft} />
+            <Text style={[s.goingText, { color: theme.purpleSoft }]}>
+              {Math.max(event.participantCount ?? 0, 1)} going
               {event.maxCapacity ? ` · ${event.maxCapacity} cap` : ''}
             </Text>
           </View>
@@ -290,13 +390,29 @@ function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => voi
               e.stopPropagation();
               onRsvp();
             }}
-            style={[s.rsvpBtn, event.isRsvped && s.rsvpBtnJoined]}
+            style={[
+              s.rsvpBtn,
+              event.isRsvped
+                ? { backgroundColor: theme.surface3 }
+                : {
+                    backgroundColor: theme.tealPrimary,
+                    ...Platform.select({
+                      ios: {
+                        shadowColor: theme.tealPrimary,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 12,
+                      },
+                      android: { elevation: 4 },
+                    }),
+                  },
+            ]}
             accessibilityLabel={event.isRsvped ? 'Leave event' : 'Join event'}
           >
             {event.isRsvped ? (
-              <Text style={[s.rsvpText, s.rsvpTextJoined]}>JOINED ✓</Text>
+              <Text style={[s.rsvpText, { color: theme.tealPrimary }]}>JOINED</Text>
             ) : (
-              <Text style={s.rsvpText}>JOIN →</Text>
+              <Text style={[s.rsvpText, { color: theme.onTeal }]}>JOIN →</Text>
             )}
           </Pressable>
         </View>
@@ -305,8 +421,8 @@ function EventDiscoveryCard({ event, onRsvp }: { event: Event; onRsvp: () => voi
   );
 }
 
-// ── Main Events Screen ───────────────────────────────────────
 export default function EventsScreen() {
+  const { theme, mode, pageBg } = useTheme();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -319,21 +435,13 @@ export default function EventsScreen() {
   const { mutate: toggleRsvp } = useRsvpEvent();
   const rsvpBusyRef = useRef<string | null>(null);
 
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    refetch,
-    isRefetching,
-    isFetching,
-  } = useEvents({
-    category: activeCategory === 'all' ? undefined : activeCategory,
-    search: debouncedSearch || undefined,
-  });
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
+    useEvents({
+      category: activeCategory === 'all' ? undefined : activeCategory,
+      search: debouncedSearch || undefined,
+    });
 
+  const { refreshListProps } = useTealRefresh(refetch);
   useRefreshOnFocus(refetch);
 
   const allEvents = data?.pages.flatMap((page) => page.data) ?? [];
@@ -400,18 +508,24 @@ export default function EventsScreen() {
     if (isLoading) {
       return (
         <View style={s.emptyState}>
-          <ActivityIndicator size="large" color={colors.lime} />
+          <ActivityIndicator size="large" color={theme.tealPrimary} />
         </View>
       );
     }
     if (isError) {
       return (
         <View style={s.emptyState}>
-          <MapPin size={40} strokeWidth={1.5} color={colors.text4} />
-          <Text style={s.emptyTitle}>COULDN'T LOAD EVENTS</Text>
-          <Text style={s.emptyBody}>Check your connection and try again</Text>
-          <TouchableOpacity onPress={() => void refetch()} style={s.retryBtn} activeOpacity={0.8}>
-            <Text style={s.retryText}>RETRY</Text>
+          <MapPin size={40} strokeWidth={1.5} color={theme.text4} />
+          <Text style={[s.emptyTitle, { color: theme.text1 }]}>Couldn't load events</Text>
+          <Text style={[s.emptyBody, { color: theme.text3 }]}>
+            Check your connection and try again
+          </Text>
+          <TouchableOpacity
+            onPress={() => void refetch()}
+            style={[s.retryBtn, { backgroundColor: theme.tealPrimary }]}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.retryText, { color: theme.onTeal }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       );
@@ -419,20 +533,36 @@ export default function EventsScreen() {
     const isSearchActive = debouncedSearch.length > 0;
     return (
       <View style={s.emptyState}>
-        <MapPin size={40} strokeWidth={1.5} color={colors.text4} />
-        <Text style={s.emptyTitle}>{isSearchActive ? 'NO MATCHING EVENTS' : 'NO EVENTS YET'}</Text>
-        <Text style={s.emptyBody}>
+        <MapPin size={40} strokeWidth={1.5} color={theme.text4} />
+        <Text style={[s.emptyTitle, { color: theme.text1 }]}>
+          {isSearchActive ? 'No matching events' : 'No events yet'}
+        </Text>
+        <Text style={[s.emptyBody, { color: theme.text3 }]}>
           {isSearchActive
             ? 'Try a different keyword or category'
             : 'Be the first — host an event for others to join'}
         </Text>
         <TouchableOpacity
           onPress={() => router.push('/event/create' as never)}
-          style={s.createBtn}
+          style={[
+            s.createBtn,
+            {
+              backgroundColor: theme.tealPrimary,
+              ...Platform.select({
+                ios: {
+                  shadowColor: theme.tealPrimary,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 16,
+                },
+                android: { elevation: 6 },
+              }),
+            },
+          ]}
           activeOpacity={0.8}
         >
-          <Plus size={16} strokeWidth={2.5} color={colors.textInverse} />
-          <Text style={s.createBtnText}>HOST AN EVENT</Text>
+          <Plus size={16} strokeWidth={2.5} color={theme.onTeal} />
+          <Text style={[s.createBtnText, { color: theme.onTeal }]}>Host an event</Text>
         </TouchableOpacity>
       </View>
     );
@@ -441,12 +571,12 @@ export default function EventsScreen() {
   const renderFooter = () =>
     isFetchingNextPage ? (
       <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-        <ActivityIndicator size="small" color={colors.lime} />
+        <ActivityIndicator size="small" color={theme.tealPrimary} />
       </View>
     ) : null;
 
   return (
-    <View style={s.root}>
+    <View style={[s.root, { backgroundColor: pageBg }]}>
       <EventsTopChrome
         searchExpanded={searchExpanded}
         searchQuery={searchQuery}
@@ -464,6 +594,7 @@ export default function EventsScreen() {
         <FlatList
           data={allEvents}
           keyExtractor={(item) => item.id}
+          style={{ flex: 1, backgroundColor: pageBg }}
           removeClippedSubviews
           maxToRenderPerBatch={6}
           windowSize={7}
@@ -495,35 +626,20 @@ export default function EventsScreen() {
           ListFooterComponent={renderFooter}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.4}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching && !isFetchingNextPage}
-              onRefresh={() => void refetch()}
-              tintColor={colors.lime}
-            />
-          }
+          {...refreshListProps}
           contentContainerStyle={{ paddingBottom: SCROLL_BOTTOM_PADDING }}
           showsVerticalScrollIndicator={false}
         />
 
-        <TabBarBottomFade />
+        <TabBarBottomFade floorColor={pageBg} />
       </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
+  root: { flex: 1 },
 
-  // ── Top chrome (matches notifications nav) ──
-  navSafe: {
-    backgroundColor: colors.bgPrimary,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
-  },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -545,7 +661,6 @@ const s = StyleSheet.create({
   navTitle: {
     fontFamily: fonts.h2,
     fontSize: 16,
-    color: colors.textPrimary,
     letterSpacing: 0.5,
   },
   navSide: {
@@ -557,18 +672,8 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: colors.tealPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.tealPrimary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.28,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-    }),
   },
 
   searchPanel: {
@@ -588,15 +693,12 @@ const s = StyleSheet.create({
     height: SEARCH_BAR_HEIGHT,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: colors.surface1,
     borderWidth: 1,
-    borderColor: colors.surface3,
   },
   searchInput: {
     flex: 1,
     fontFamily: fonts.body,
     fontSize: 15,
-    color: colors.textPrimary,
     paddingVertical: 0,
     includeFontPadding: false,
   },
@@ -604,75 +706,36 @@ const s = StyleSheet.create({
     marginLeft: 2,
     paddingLeft: 6,
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.surface3,
   },
 
-  // ── Filter bar ──
-  filterBarWrapper: {
-    marginBottom: 8,
-  },
+  filterBarWrapper: { marginBottom: 4 },
   filterBar: {
     paddingHorizontal: 16,
     gap: 8,
-    paddingBottom: 4,
+    paddingTop: 6,
+    paddingBottom: 10,
+    alignItems: 'center',
   },
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: radius.card,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 3, height: 3 },
-        shadowOpacity: 0.35,
-        shadowRadius: 6,
-      },
-      android: { elevation: 3 },
-    }),
-  },
-  filterChipActive: {
-    backgroundColor: colors.lime,
-    borderColor: colors.lime,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.lime,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.25,
-        shadowRadius: 14,
-      },
-      android: { elevation: 4 },
-    }),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterChipText: {
     fontFamily: fonts.label,
     fontSize: 10,
-    color: colors.textMuted,
     letterSpacing: 1,
   },
-  filterChipTextActive: {
-    color: colors.onTeal,
-  },
 
-  // ── Event Card ──
   card: {
     position: 'relative',
-    backgroundColor: colors.surface,
     borderRadius: 20,
     marginHorizontal: 16,
     marginBottom: 12,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 5, height: 5 },
-        shadowOpacity: 0.5,
-        shadowRadius: 14,
-      },
-      android: { elevation: 8 },
-    }),
   },
   cardBadgeRow: {
     position: 'absolute',
@@ -690,40 +753,26 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  organiserTypeClub: {
-    backgroundColor: 'rgba(0, 229, 195, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 229, 195, 0.45)',
-  },
-  organiserTypePerson: {
-    backgroundColor: 'rgba(123, 77, 255, 0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 130, 255, 0.5)',
-  },
   organiserTypeText: {
     fontFamily: fonts.label,
     fontSize: 9,
     letterSpacing: 1.2,
   },
-  organiserTypeTextClub: {
-    color: colors.tealPrimary,
-  },
-  organiserTypeTextPerson: {
-    color: colors.purpleSoft,
-  },
   coverArea: {
     height: 160,
     position: 'relative',
   },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
   coverPlaceholder: {
     flex: 1,
-    backgroundColor: colors.surface2,
   },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.live,
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -744,31 +793,18 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: colors.surface3,
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  freeBadge: {
-    backgroundColor: 'rgba(0,229,195,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,229,195,0.3)',
-  },
   priceBadgeText: {
     fontFamily: fonts.label,
     fontSize: 10,
-    color: colors.textPrimary,
     letterSpacing: 1,
   },
-  freeBadgeText: {
-    color: colors.tealPrimary,
-  },
-  cardContent: {
-    padding: 16,
-  },
+  cardContent: { padding: 16 },
   categoryPill: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.surface3,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -777,13 +813,11 @@ const s = StyleSheet.create({
   categoryPillText: {
     fontFamily: fonts.label,
     fontSize: 9,
-    color: colors.textMuted,
     letterSpacing: 1.5,
   },
   title: {
     fontFamily: fonts.heading,
     fontSize: 16,
-    color: colors.text1,
     letterSpacing: -0.3,
     lineHeight: 20,
     marginBottom: 10,
@@ -798,33 +832,19 @@ const s = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.surface3,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: colors.lime,
-  },
-  organiserAvatarClub: {
-    borderRadius: 6,
-    borderColor: colors.sage,
   },
   organiserAvatarText: {
     fontFamily: fonts.heading,
     fontSize: 10,
-    color: colors.text2,
   },
   organiserName: {
     fontFamily: fonts.heading,
     fontSize: 11,
-    color: colors.text2,
     letterSpacing: 0.5,
     flex: 1,
-  },
-  verifiedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.purpleHero,
   },
   metaRow: {
     flexDirection: 'row',
@@ -841,12 +861,10 @@ const s = StyleSheet.create({
   metaSep: {
     width: 1,
     height: 12,
-    backgroundColor: colors.border,
   },
   metaText: {
     fontFamily: fonts.caption,
     fontSize: 12,
-    color: colors.textMuted,
     flex: 1,
   },
   cardFooter: {
@@ -862,39 +880,18 @@ const s = StyleSheet.create({
   goingText: {
     fontFamily: fonts.caption,
     fontSize: 12,
-    color: colors.purpleSoft,
   },
   rsvpBtn: {
-    backgroundColor: colors.tealPrimary,
     paddingHorizontal: 18,
     paddingVertical: 9,
     borderRadius: radius.sm,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.tealPrimary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25,
-        shadowRadius: 12,
-      },
-      android: { elevation: 4 },
-    }),
-  },
-  rsvpBtnJoined: {
-    backgroundColor: colors.surface3,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   rsvpText: {
     fontFamily: fonts.button,
     fontSize: 11,
-    color: colors.onTeal,
     letterSpacing: 1,
   },
-  rsvpTextJoined: {
-    color: colors.tealPrimary,
-  },
 
-  // ── Empty state ──
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -902,25 +899,21 @@ const s = StyleSheet.create({
     paddingHorizontal: 32,
   },
   emptyTitle: {
-    fontFamily: fonts.heading,
+    fontFamily: fonts.h2,
     fontSize: 18,
-    color: colors.text1,
     marginTop: 16,
-    textTransform: 'uppercase',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
     textAlign: 'center',
   },
   emptyBody: {
     fontFamily: fonts.body,
     fontSize: 14,
-    color: colors.text3,
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 22,
   },
   retryBtn: {
     marginTop: 20,
-    backgroundColor: colors.lime,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 14,
@@ -928,7 +921,6 @@ const s = StyleSheet.create({
   retryText: {
     fontFamily: fonts.heading,
     fontSize: 12,
-    color: colors.textInverse,
     letterSpacing: 1.5,
   },
   createBtn: {
@@ -936,24 +928,13 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.lime,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 14,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.lime,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
-      },
-      android: { elevation: 6 },
-    }),
   },
   createBtnText: {
     fontFamily: fonts.heading,
     fontSize: 12,
-    color: colors.textInverse,
     letterSpacing: 1.5,
   },
 });

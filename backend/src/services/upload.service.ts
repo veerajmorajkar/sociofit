@@ -1,7 +1,10 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
+import { eq, and } from 'drizzle-orm';
 import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2.js';
+import { db } from '../config/database.js';
+import { uploads } from '../db/schema.js';
 
 // Allowed MIME types and their extensions
 const ALLOWED_TYPES: Record<string, string> = {
@@ -56,10 +59,44 @@ export async function generatePresignedUrl(
   const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
   const publicUrl = `${R2_PUBLIC_URL}/${key}`;
 
+  // Record the issuance so downstream services (posts/events/profile) can verify
+  // any mediaUrl they're handed actually corresponds to an upload we authorised
+  // for this exact user, rather than trusting the URL shape alone.
+  await db.insert(uploads).values({
+    uploaderId: userId,
+    objectKey: key,
+    folder,
+    contentType: fileType,
+    sizeBytes: fileSize,
+  });
+
   return {
     uploadUrl,
     publicUrl,
     key,
     expiresIn: 3600,
   };
+}
+
+/**
+ * Marks an upload as confirmed once the client has finished the direct-to-R2
+ * PUT. Not yet enforced as a hard gate on media acceptance (see media-url.ts)
+ * to avoid breaking the existing mobile upload flow before it adopts this
+ * call, but the timestamp is recorded for audit/anti-abuse purposes now.
+ */
+export async function confirmUpload(userId: string, objectKey: string): Promise<void> {
+  const [record] = await db
+    .select({ id: uploads.id, uploaderId: uploads.uploaderId })
+    .from(uploads)
+    .where(eq(uploads.objectKey, objectKey))
+    .limit(1);
+
+  if (!record || record.uploaderId !== userId) {
+    throw new Error('Upload record not found');
+  }
+
+  await db
+    .update(uploads)
+    .set({ confirmedAt: new Date() })
+    .where(and(eq(uploads.objectKey, objectKey), eq(uploads.uploaderId, userId)));
 }

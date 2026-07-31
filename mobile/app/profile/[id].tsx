@@ -4,11 +4,13 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useUserProfile } from '@/hooks/useProfile';
 import { followUser, unfollowUser } from '@/services/users.service';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useStartDm } from '@/hooks/useMessages';
+import { useStartDm, useJoinClubAnnouncement } from '@/hooks/useMessages';
 import ProfileView from '@/components/profile/ProfileView';
-import { colors, fonts } from '@/constants/theme';
+import { fonts } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function UserProfileScreen() {
+  const { theme } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
 
@@ -21,6 +23,7 @@ export default function UserProfileScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile', id] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (err) => {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not update follow');
@@ -28,6 +31,7 @@ export default function UserProfileScreen() {
   });
 
   const { mutate: openChat, isPending: chatLoading } = useStartDm();
+  const { mutate: joinAnnouncement, isPending: announcementLoading } = useJoinClubAnnouncement();
 
   useEffect(() => {
     if (profile?.isOwnProfile) {
@@ -37,18 +41,22 @@ export default function UserProfileScreen() {
 
   if (isLoading) {
     return (
-      <View style={s.centered}>
-        <ActivityIndicator size="large" color={colors.tealPrimary} />
+      <View style={[s.centered, { backgroundColor: theme.bgPrimary }]}>
+        <ActivityIndicator size="large" color={theme.tealPrimary} />
       </View>
     );
   }
 
   if (isError || !profile) {
     return (
-      <View style={s.centered}>
-        <Text style={s.errTitle}>PROFILE NOT FOUND</Text>
-        <TouchableOpacity onPress={() => void refetch()} style={s.retryBtn} activeOpacity={0.85}>
-          <Text style={s.retryText}>RETRY</Text>
+      <View style={[s.centered, { backgroundColor: theme.bgPrimary }]}>
+        <Text style={[s.errTitle, { color: theme.textPrimary }]}>PROFILE NOT FOUND</Text>
+        <TouchableOpacity
+          onPress={() => void refetch()}
+          style={[s.retryBtn, { backgroundColor: theme.tealPrimary }]}
+          activeOpacity={0.85}
+        >
+          <Text style={[s.retryText, { color: theme.onTeal }]}>RETRY</Text>
         </TouchableOpacity>
       </View>
     );
@@ -56,8 +64,8 @@ export default function UserProfileScreen() {
 
   if (profile.isOwnProfile) {
     return (
-      <View style={s.centered}>
-        <ActivityIndicator size="large" color={colors.tealPrimary} />
+      <View style={[s.centered, { backgroundColor: theme.bgPrimary }]}>
+        <ActivityIndicator size="large" color={theme.tealPrimary} />
       </View>
     );
   }
@@ -74,8 +82,30 @@ export default function UserProfileScreen() {
     });
   };
 
+  const openAnnouncementChat = (conversationId: string) => {
+    router.push(`/chat/${conversationId}` as never);
+  };
+
+  const onAnnouncementPress = () => {
+    const channel = profile.announcementChannel;
+    if (!channel || !id || !profile.isFollowing) return;
+    if (channel.conversationId && channel.canView !== false) {
+      openAnnouncementChat(channel.conversationId);
+      return;
+    }
+    joinAnnouncement(id, {
+      onSuccess: ({ conversationId }) => openAnnouncementChat(conversationId),
+      onError: (err) => {
+        Alert.alert(
+          'Could not open announcements',
+          err instanceof Error ? err.message : 'Try again',
+        );
+      },
+    });
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <ProfileView
         userId={profile.id}
         displayName={profile.displayName}
@@ -93,6 +123,10 @@ export default function UserProfileScreen() {
         onToggleFollow={() => toggleFollow(profile.isFollowing)}
         onMessage={onMessage}
         messageLoading={chatLoading}
+        accountType={profile.accountType}
+        announcementChannel={profile.announcementChannel}
+        onAnnouncementPress={onAnnouncementPress}
+        announcementLoading={announcementLoading}
         contentPaddingBottom={40}
       />
     </View>
@@ -100,19 +134,8 @@ export default function UserProfileScreen() {
 }
 
 const s = StyleSheet.create({
-  centered: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  errTitle: { fontFamily: fonts.h2, color: colors.textPrimary, marginBottom: 16 },
-  retryBtn: {
-    backgroundColor: colors.tealPrimary,
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  retryText: { fontFamily: fonts.button, fontSize: 14, color: colors.onTeal },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  errTitle: { fontFamily: fonts.h2, marginBottom: 16 },
+  retryBtn: { borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  retryText: { fontFamily: fonts.button, fontSize: 14 },
 });

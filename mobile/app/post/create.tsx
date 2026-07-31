@@ -28,7 +28,8 @@ import type { UserSummary } from '@/types/user';
 import { useAuthStore } from '@/stores/authStore';
 import { createPost } from '@/services/posts.service';
 import { uploadFile, type UploadFileType } from '@/services/upload.service';
-import { colors, fonts, radius, shadows } from '@/constants/theme';
+import { fonts, radius, type ThemeType } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const SCREEN_W = Dimensions.get('window').width;
 const H_PAD = 16;
@@ -56,6 +57,8 @@ function hasGalleryAccess(
 }
 
 function ModalSheet({ children }: { children: ReactNode }) {
+  const { theme, pageBg } = useTheme();
+  const s = useMemo(() => createStyles(theme, pageBg), [theme, pageBg]);
   return (
     <View style={s.modalSheet}>
       <View style={s.modalHandle} />
@@ -65,6 +68,8 @@ function ModalSheet({ children }: { children: ReactNode }) {
 }
 
 function HeaderBar({ left, title, right }: { left: ReactNode; title: string; right: ReactNode }) {
+  const { theme, pageBg } = useTheme();
+  const s = useMemo(() => createStyles(theme, pageBg), [theme, pageBg]);
   return (
     <View style={s.headerBar}>
       <View style={s.headerSlot}>{left}</View>
@@ -85,6 +90,8 @@ function TopChrome({
   showModeToggle?: boolean;
   toggle: ReactNode;
 }) {
+  const { theme, pageBg } = useTheme();
+  const s = useMemo(() => createStyles(theme, pageBg), [theme, pageBg]);
   return (
     <View style={s.chromeBlock}>
       {header}
@@ -94,6 +101,8 @@ function TopChrome({
 }
 
 export default function CreatePostScreen() {
+  const { theme, pageBg } = useTheme();
+  const s = useMemo(() => createStyles(theme, pageBg), [theme, pageBg]);
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
@@ -330,7 +339,7 @@ export default function CreatePostScreen() {
         <ImagePlus
           size={15}
           strokeWidth={2}
-          color={mode === 'photo' ? colors.onTeal : colors.textMuted}
+          color={mode === 'photo' ? theme.onTeal : theme.textMuted}
         />
         <Text style={[s.segmentText, mode === 'photo' && s.segmentTextActive]}>Photo</Text>
       </Pressable>
@@ -338,11 +347,7 @@ export default function CreatePostScreen() {
         style={[s.segment, mode === 'text' && s.segmentActive]}
         onPress={() => switchMode('text')}
       >
-        <Type
-          size={15}
-          strokeWidth={2}
-          color={mode === 'text' ? colors.onTeal : colors.textMuted}
-        />
+        <Type size={15} strokeWidth={2} color={mode === 'text' ? theme.onTeal : theme.textMuted} />
         <Text style={[s.segmentText, mode === 'text' && s.segmentTextActive]}>Text</Text>
       </Pressable>
     </View>
@@ -371,7 +376,7 @@ export default function CreatePostScreen() {
           <TextInput
             style={s.captionInput}
             placeholder={mode === 'photo' ? 'Write a caption...' : 'What do you want to share?'}
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.textMuted}
             value={caption}
             onChangeText={setCaption}
             multiline
@@ -408,7 +413,7 @@ export default function CreatePostScreen() {
                 title="New post"
                 left={
                   <Pressable onPress={closeScreen} hitSlop={10} style={s.headerIconBtn}>
-                    <X size={20} strokeWidth={2} color={colors.textSecondary} />
+                    <X size={20} strokeWidth={2} color={theme.textSecondary} />
                   </Pressable>
                 }
                 right={
@@ -419,7 +424,7 @@ export default function CreatePostScreen() {
                     style={s.headerActionBtn}
                   >
                     {isPending ? (
-                      <ActivityIndicator size="small" color={colors.tealPrimary} />
+                      <ActivityIndicator size="small" color={theme.tealPrimary} />
                     ) : (
                       <Text style={[s.shareLabel, !canShareText && s.shareLabelDisabled]}>
                         Share
@@ -464,7 +469,7 @@ export default function CreatePostScreen() {
                     hitSlop={10}
                     style={s.headerIconBtn}
                   >
-                    <ChevronLeft size={22} strokeWidth={2} color={colors.textPrimary} />
+                    <ChevronLeft size={22} strokeWidth={2} color={theme.textPrimary} />
                   </Pressable>
                 }
                 right={
@@ -475,7 +480,7 @@ export default function CreatePostScreen() {
                     style={s.headerActionBtn}
                   >
                     {isPending ? (
-                      <ActivityIndicator size="small" color={colors.tealPrimary} />
+                      <ActivityIndicator size="small" color={theme.tealPrimary} />
                     ) : (
                       <Text style={[s.shareLabel, !canSharePhoto && s.shareLabelDisabled]}>
                         Share
@@ -515,7 +520,7 @@ export default function CreatePostScreen() {
         ) : (
           <View style={s.previewPlaceholder}>
             <View style={s.previewEmptyIcon}>
-              <ImagePlus size={32} strokeWidth={1.5} color={colors.tealPrimary} />
+              <ImagePlus size={32} strokeWidth={1.5} color={theme.tealPrimary} />
             </View>
             <Text style={s.previewEmptyTitle}>Select photos to post</Text>
             <Text style={s.previewEmptySub}>Choose from the grid below</Text>
@@ -536,7 +541,7 @@ export default function CreatePostScreen() {
               title="New post"
               left={
                 <Pressable onPress={closeScreen} hitSlop={10} style={s.headerIconBtn}>
-                  <X size={20} strokeWidth={2} color={colors.textSecondary} />
+                  <X size={20} strokeWidth={2} color={theme.textSecondary} />
                 </Pressable>
               }
               right={
@@ -592,7 +597,7 @@ export default function CreatePostScreen() {
           </View>
         ) : galleryLoading || galleryPermission === 'checking' ? (
           <View style={s.gridLoader}>
-            <ActivityIndicator color={colors.tealPrimary} />
+            <ActivityIndicator color={theme.tealPrimary} />
           </View>
         ) : (
           <FlatList
@@ -622,7 +627,7 @@ export default function CreatePostScreen() {
                       )}
                       {selectedIds.length === 1 && (
                         <View style={s.gridCheckIcon}>
-                          <Check size={16} strokeWidth={3} color={colors.onTeal} />
+                          <Check size={16} strokeWidth={3} color={theme.onTeal} />
                         </View>
                       )}
                     </>
@@ -650,322 +655,324 @@ export default function CreatePostScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  modalSheet: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    overflow: 'hidden',
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.surface3,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 2,
-  },
-  root: { flex: 1, backgroundColor: colors.bgPrimary },
-  chromeBlock: {
-    backgroundColor: colors.bgPrimary,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
-  },
-  chromeToggleWrap: {
-    paddingHorizontal: H_PAD,
-    paddingTop: 6,
-    paddingBottom: 14,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 48,
-    paddingHorizontal: 12,
-    paddingBottom: 4,
-  },
-  headerSlot: {
-    width: 72,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  headerSlotRight: { alignItems: 'flex-end' },
-  headerIconBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 4,
-  },
-  headerActionBtn: {
-    minWidth: 64,
-    height: 36,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    paddingRight: 8,
-  },
-  headerRightInner: {
-    minWidth: 64,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    paddingRight: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    fontFamily: fonts.h2,
-    fontSize: 17,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    letterSpacing: 0.2,
-    paddingHorizontal: 4,
-  },
-  shareLabel: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 16,
-    color: colors.tealPrimary,
-  },
-  shareLabelDisabled: { color: colors.textDisabled },
-  countPill: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-  },
-  countPillText: {
-    fontFamily: fonts.stat,
-    fontSize: 13,
-    color: colors.tealPrimary,
-  },
-  segmentTrack: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface1,
-    borderRadius: radius.md,
-    padding: 5,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    ...shadows.sm,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    paddingVertical: 11,
-    borderRadius: radius.sm,
-  },
-  segmentActive: { backgroundColor: colors.tealPrimary, ...shadows.teal },
-  segmentText: { fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.textMuted },
-  segmentTextActive: { color: colors.onTeal },
-  previewBlock: {
-    paddingHorizontal: H_PAD,
-    paddingTop: 12,
-    paddingBottom: 10,
-    alignItems: 'center',
-  },
-  previewSlot: {
-    width: PREVIEW_W,
-    height: PREVIEW_H,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    backgroundColor: colors.surface1,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    position: 'relative',
-    ...shadows.md,
-  },
-  previewImage: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  previewPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    backgroundColor: colors.surface1,
-  },
-  previewCountPill: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-  },
-  previewCountText: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.textPrimary,
-    letterSpacing: 0.3,
-  },
-  previewEmptyIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  previewEmptyTitle: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 16,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  previewEmptySub: {
-    fontFamily: fonts.caption,
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  gridList: { flex: 1 },
-  gridContent: { paddingHorizontal: H_PAD, paddingTop: 4 },
-  gridRow: { gap: GRID_GAP, marginBottom: GRID_GAP },
-  gridCell: {
-    width: CELL,
-    height: CELL,
-    borderRadius: radius.xs,
-    overflow: 'hidden',
-    backgroundColor: colors.surface2,
-  },
-  gridCellSelected: {
-    borderWidth: 2,
-    borderColor: colors.tealPrimary,
-  },
-  gridImage: { width: '100%', height: '100%' },
-  gridCheck: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,229,195,0.28)',
-  },
-  gridCheckIcon: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gridOrder: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.tealPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 5,
-  },
-  gridOrderText: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.onTeal,
-  },
-  gridLoader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  deniedWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  deniedTitle: {
-    fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
-  deniedText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  deniedBtn: {
-    backgroundColor: colors.tealPrimary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-  },
-  deniedBtnText: { fontFamily: fonts.button, fontSize: 13, color: colors.onTeal },
-  deniedLink: { padding: 8 },
-  deniedLinkText: { fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.purpleSoft },
-  proceedSafe: {
-    paddingHorizontal: H_PAD,
-    paddingTop: 10,
-    backgroundColor: colors.bgPrimary,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.surface3,
-  },
-  proceedBtn: {
-    backgroundColor: colors.tealPrimary,
-    paddingVertical: 15,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    ...shadows.teal,
-  },
-  proceedBtnDisabled: { opacity: 0.38 },
-  proceedBtnText: {
-    fontFamily: fonts.button,
-    fontSize: 15,
-    color: colors.onTeal,
-    letterSpacing: 0.5,
-  },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: H_PAD, paddingBottom: 32, gap: 16 },
-  scrollContentBelowChrome: { paddingTop: 16 },
-  thumbStrip: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  thumbWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.sm,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.surface3,
-  },
-  thumb: { width: '100%', height: '100%' },
-  thumbBadge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    backgroundColor: colors.tealPrimary,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbBadgeText: {
-    fontFamily: fonts.label,
-    fontSize: 10,
-    color: colors.onTeal,
-  },
-  captionCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  captionField: { flex: 1, minHeight: 88 },
-  captionInput: {
-    fontFamily: fonts.body,
-    fontSize: 16,
-    color: colors.textPrimary,
-    lineHeight: 24,
-    minHeight: 72,
-    padding: 0,
-  },
-  charCount: {
-    fontFamily: fonts.caption,
-    fontSize: 11,
-    color: colors.textMuted,
-    textAlign: 'right',
-    marginTop: 6,
-  },
-});
+function createStyles(theme: ThemeType, pageBg: string) {
+  return StyleSheet.create({
+    modalSheet: {
+      flex: 1,
+      backgroundColor: pageBg,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      overflow: 'hidden',
+    },
+    modalHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.surface3,
+      alignSelf: 'center',
+      marginTop: 10,
+      marginBottom: 2,
+    },
+    root: { flex: 1, backgroundColor: pageBg },
+    chromeBlock: {
+      backgroundColor: pageBg,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.surface3,
+    },
+    chromeToggleWrap: {
+      paddingHorizontal: H_PAD,
+      paddingTop: 6,
+      paddingBottom: 14,
+    },
+    headerBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 48,
+      paddingHorizontal: 12,
+      paddingBottom: 4,
+    },
+    headerSlot: {
+      width: 72,
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+    },
+    headerSlotRight: { alignItems: 'flex-end' },
+    headerIconBtn: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 4,
+    },
+    headerActionBtn: {
+      minWidth: 64,
+      height: 36,
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      paddingRight: 8,
+    },
+    headerRightInner: {
+      minWidth: 64,
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      paddingRight: 8,
+    },
+    headerTitle: {
+      flex: 1,
+      fontFamily: fonts.h2,
+      fontSize: 17,
+      color: theme.textPrimary,
+      textAlign: 'center',
+      letterSpacing: 0.2,
+      paddingHorizontal: 4,
+    },
+    shareLabel: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 16,
+      color: theme.tealPrimary,
+    },
+    shareLabelDisabled: { color: theme.textDisabled },
+    countPill: {
+      backgroundColor: theme.surface2,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: radius.full,
+    },
+    countPillText: {
+      fontFamily: fonts.stat,
+      fontSize: 13,
+      color: theme.tealPrimary,
+    },
+    segmentTrack: {
+      flexDirection: 'row',
+      backgroundColor: theme.surface1,
+      borderRadius: radius.md,
+      padding: 5,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      ...theme.shadows.sm,
+    },
+    segment: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      paddingVertical: 11,
+      borderRadius: radius.sm,
+    },
+    segmentActive: { backgroundColor: theme.tealPrimary, ...theme.shadows.teal },
+    segmentText: { fontFamily: fonts.bodyStrong, fontSize: 14, color: theme.textMuted },
+    segmentTextActive: { color: theme.onTeal },
+    previewBlock: {
+      paddingHorizontal: H_PAD,
+      paddingTop: 12,
+      paddingBottom: 10,
+      alignItems: 'center',
+    },
+    previewSlot: {
+      width: PREVIEW_W,
+      height: PREVIEW_H,
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+      backgroundColor: theme.surface1,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      position: 'relative',
+      ...theme.shadows.md,
+    },
+    previewImage: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    previewPlaceholder: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 24,
+      backgroundColor: theme.surface1,
+    },
+    previewCountPill: {
+      position: 'absolute',
+      bottom: 12,
+      right: 12,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: radius.full,
+    },
+    previewCountText: {
+      fontFamily: fonts.label,
+      fontSize: 11,
+      color: theme.textPrimary,
+      letterSpacing: 0.3,
+    },
+    previewEmptyIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: theme.surface2,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 2,
+    },
+    previewEmptyTitle: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 16,
+      color: theme.textPrimary,
+      textAlign: 'center',
+    },
+    previewEmptySub: {
+      fontFamily: fonts.caption,
+      fontSize: 13,
+      color: theme.textMuted,
+      textAlign: 'center',
+    },
+    gridList: { flex: 1 },
+    gridContent: { paddingHorizontal: H_PAD, paddingTop: 4 },
+    gridRow: { gap: GRID_GAP, marginBottom: GRID_GAP },
+    gridCell: {
+      width: CELL,
+      height: CELL,
+      borderRadius: radius.xs,
+      overflow: 'hidden',
+      backgroundColor: theme.surface2,
+    },
+    gridCellSelected: {
+      borderWidth: 2,
+      borderColor: theme.tealPrimary,
+    },
+    gridImage: { width: '100%', height: '100%' },
+    gridCheck: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,229,195,0.28)',
+    },
+    gridCheckIcon: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gridOrder: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: theme.tealPrimary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 5,
+    },
+    gridOrderText: {
+      fontFamily: fonts.label,
+      fontSize: 11,
+      color: theme.onTeal,
+    },
+    gridLoader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    deniedWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 32,
+      gap: 12,
+    },
+    deniedTitle: {
+      fontFamily: fonts.h2,
+      fontSize: 16,
+      color: theme.textPrimary,
+      textAlign: 'center',
+      letterSpacing: 0.3,
+    },
+    deniedText: {
+      fontFamily: fonts.body,
+      fontSize: 14,
+      color: theme.textMuted,
+      textAlign: 'center',
+    },
+    deniedBtn: {
+      backgroundColor: theme.tealPrimary,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: radius.md,
+    },
+    deniedBtnText: { fontFamily: fonts.button, fontSize: 13, color: theme.onTeal },
+    deniedLink: { padding: 8 },
+    deniedLinkText: { fontFamily: fonts.bodyStrong, fontSize: 14, color: theme.purpleSoft },
+    proceedSafe: {
+      paddingHorizontal: H_PAD,
+      paddingTop: 10,
+      backgroundColor: pageBg,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.surface3,
+    },
+    proceedBtn: {
+      backgroundColor: theme.tealPrimary,
+      paddingVertical: 15,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      ...theme.shadows.teal,
+    },
+    proceedBtnDisabled: { opacity: 0.38 },
+    proceedBtnText: {
+      fontFamily: fonts.button,
+      fontSize: 15,
+      color: theme.onTeal,
+      letterSpacing: 0.5,
+    },
+    scroll: { flex: 1 },
+    scrollContent: { paddingHorizontal: H_PAD, paddingBottom: 32, gap: 16 },
+    scrollContentBelowChrome: { paddingTop: 16 },
+    thumbStrip: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingVertical: 4,
+    },
+    thumbWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: radius.sm,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.surface3,
+    },
+    thumb: { width: '100%', height: '100%' },
+    thumbBadge: {
+      position: 'absolute',
+      bottom: 4,
+      right: 4,
+      backgroundColor: theme.tealPrimary,
+      borderRadius: 8,
+      minWidth: 16,
+      height: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    thumbBadgeText: {
+      fontFamily: fonts.label,
+      fontSize: 10,
+      color: theme.onTeal,
+    },
+    captionCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    captionField: { flex: 1, minHeight: 88 },
+    captionInput: {
+      fontFamily: fonts.body,
+      fontSize: 16,
+      color: theme.textPrimary,
+      lineHeight: 24,
+      minHeight: 72,
+      padding: 0,
+    },
+    charCount: {
+      fontFamily: fonts.caption,
+      fontSize: 11,
+      color: theme.textMuted,
+      textAlign: 'right',
+      marginTop: 6,
+    },
+  });
+}

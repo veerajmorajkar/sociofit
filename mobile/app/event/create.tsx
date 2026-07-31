@@ -11,7 +11,7 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,7 +25,8 @@ import { usePlaceAutocomplete, usePlacesStatus } from '@/hooks/usePlaces';
 import { createEvent } from '@/services/events.service';
 import { getPlaceDetails } from '@/services/places.service';
 import { uploadFile } from '@/services/upload.service';
-import { colors, fonts, radius, shadows } from '@/constants/theme';
+import { fonts, radius, type ThemeType } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface SelectedPlace {
   placeId: string;
@@ -39,11 +40,24 @@ type ActivePicker = 'date' | 'start' | 'end' | null;
 
 const IOS_PICKER_HEIGHT = 216;
 
-function tomorrowAt(hour: number, minute: number): Date {
+function tomorrowAtMidnight(): Date {
   const d = new Date();
   d.setDate(d.getDate() + 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Time-only value for pickers — always anchored to today (date part ignored on submit). */
+function timeTodayAt(hour: number, minute: number): Date {
+  const d = new Date();
   d.setHours(hour, minute, 0, 0);
   return d;
+}
+
+function applyTimeFromPicker(target: Date, picked: Date): Date {
+  const next = new Date(target);
+  next.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+  return next;
 }
 
 function combineDateAndTime(date: Date, time: Date): Date {
@@ -69,15 +83,19 @@ function formatPickerTime(d: Date): string {
   });
 }
 
-function PickerShell({ visible, children }: { visible: boolean; children: ReactNode }) {
-  if (!visible) return null;
-  if (Platform.OS === 'ios') {
-    return <View style={s.pickerShell}>{children}</View>;
-  }
-  return <>{children}</>;
-}
-
 export default function CreateEventScreen() {
+  const { theme, pageBg, mode } = useTheme();
+  const s = useMemo(() => createStyles(theme, pageBg), [theme, pageBg]);
+  const pickerTheme = mode === 'dark' ? 'dark' : 'light';
+
+  const PickerShell = ({ visible, children }: { visible: boolean; children: ReactNode }) => {
+    if (!visible) return null;
+    if (Platform.OS === 'ios') {
+      return <View style={s.pickerShell}>{children}</View>;
+    }
+    return <>{children}</>;
+  };
+
   const queryClient = useQueryClient();
   const { data: categories, isLoading: catsLoading } = useCategories();
   const { data: placesStatus } = usePlacesStatus();
@@ -91,9 +109,9 @@ export default function CreateEventScreen() {
   const [locationQuery, setLocationQuery] = useState('');
   const [locationDetails, setLocationDetails] = useState('');
   const [pickingPlace, setPickingPlace] = useState(false);
-  const [eventDate, setEventDate] = useState(() => tomorrowAt(0, 0));
-  const [startTime, setStartTime] = useState(() => tomorrowAt(7, 0));
-  const [endTime, setEndTime] = useState(() => tomorrowAt(9, 0));
+  const [eventDate, setEventDate] = useState(() => tomorrowAtMidnight());
+  const [startTime, setStartTime] = useState(() => timeTodayAt(7, 0));
+  const [endTime, setEndTime] = useState(() => timeTodayAt(9, 0));
   const [maxCapacity, setMaxCapacity] = useState('');
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
 
@@ -117,12 +135,12 @@ export default function CreateEventScreen() {
 
   const onStartTimeChange = (_: DateTimePickerEvent, date?: Date) => {
     if (Platform.OS === 'android') setActivePicker(null);
-    if (date) setStartTime(date);
+    if (date) setStartTime((prev) => applyTimeFromPicker(prev, date));
   };
 
   const onEndTimeChange = (_: DateTimePickerEvent, date?: Date) => {
     if (Platform.OS === 'android') setActivePicker(null);
-    if (date) setEndTime(date);
+    if (date) setEndTime((prev) => applyTimeFromPicker(prev, date));
   };
 
   const pickCover = async () => {
@@ -217,10 +235,34 @@ export default function CreateEventScreen() {
     },
   });
 
+  const titleOk = title.trim().length >= 5;
+  const categoryOk = !!categoryId;
+  const locationOk = !!selectedPlace;
+  const categoriesLoaded = !catsLoading && (categories?.length ?? 0) > 0;
+
+  const submitBlockers = useMemo(() => {
+    const blockers: string[] = [];
+    if (!titleOk) {
+      blockers.push(`Title needs at least 5 characters (${title.trim().length}/5)`);
+    }
+    if (!categoriesLoaded) {
+      blockers.push('Categories are still loading or missing on the server');
+    } else if (!categoryOk) {
+      blockers.push('Select a category');
+    }
+    if (!locationOk) {
+      blockers.push('Search location and tap a suggestion from the list');
+    }
+    if (uploadingCover) blockers.push('Banner image is still uploading');
+    if (pickingPlace) blockers.push('Loading location details…');
+    return blockers;
+  }, [titleOk, title, categoriesLoaded, categoryOk, locationOk, uploadingCover, pickingPlace]);
+
   const canSubmit =
-    title.trim().length >= 5 &&
-    !!categoryId &&
-    !!selectedPlace &&
+    titleOk &&
+    categoryOk &&
+    locationOk &&
+    categoriesLoaded &&
     !isPending &&
     !uploadingCover &&
     !pickingPlace;
@@ -253,7 +295,7 @@ export default function CreateEventScreen() {
               accessibilityLabel="Go back"
               accessibilityRole="button"
             >
-              <ChevronLeft size={24} strokeWidth={2} color={colors.textPrimary} />
+              <ChevronLeft size={24} strokeWidth={2} color={theme.textPrimary} />
             </TouchableOpacity>
           </View>
           <View style={s.navTitleWrap}>
@@ -283,10 +325,10 @@ export default function CreateEventScreen() {
               ) : (
                 <View style={s.bannerPlaceholder}>
                   {uploadingCover ? (
-                    <ActivityIndicator color={colors.tealPrimary} />
+                    <ActivityIndicator color={theme.tealPrimary} />
                   ) : (
                     <>
-                      <ImagePlus size={28} strokeWidth={1.75} color={colors.textMuted} />
+                      <ImagePlus size={28} strokeWidth={1.75} color={theme.textMuted} />
                       <Text style={s.bannerHint}>Tap to add banner</Text>
                     </>
                   )}
@@ -300,7 +342,7 @@ export default function CreateEventScreen() {
                 hitSlop={8}
                 accessibilityLabel="Remove banner"
               >
-                <X size={14} strokeWidth={2} color={colors.textPrimary} />
+                <X size={14} strokeWidth={2} color={theme.textPrimary} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -310,18 +352,21 @@ export default function CreateEventScreen() {
           <TextInput
             style={s.input}
             placeholder="Sunday Morning Run"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.textMuted}
             value={title}
             onChangeText={setTitle}
             maxLength={200}
           />
+          <Text style={[s.hint, !titleOk && title.trim().length > 0 && s.hintError]}>
+            {titleOk ? 'Title looks good' : `At least 5 characters (${title.trim().length}/5)`}
+          </Text>
 
           {/* Description */}
           <Text style={s.fieldLabel}>DESCRIPTION</Text>
           <TextInput
             style={[s.input, s.textArea]}
             placeholder="What to expect, what to bring..."
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.textMuted}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -333,7 +378,11 @@ export default function CreateEventScreen() {
           {/* Category */}
           <Text style={s.fieldLabel}>CATEGORY</Text>
           {catsLoading ? (
-            <ActivityIndicator color={colors.tealPrimary} style={{ marginVertical: 12 }} />
+            <ActivityIndicator color={theme.tealPrimary} style={{ marginVertical: 12 }} />
+          ) : (categories ?? []).length === 0 ? (
+            <Text style={s.hintWarn}>
+              No categories on the server yet. Ask the admin to run database seed on production.
+            </Text>
           ) : (
             <View style={s.chipGrid}>
               {(categories ?? []).map((cat) => {
@@ -351,12 +400,15 @@ export default function CreateEventScreen() {
               })}
             </View>
           )}
+          {!catsLoading && !categoryOk && (categories?.length ?? 0) > 0 ? (
+            <Text style={s.hint}>Tap a category chip above</Text>
+          ) : null}
 
           {/* Location search */}
           <Text style={s.fieldLabel}>LOCATION</Text>
           {selectedPlace ? (
             <View style={s.selectedPlaceCard}>
-              <MapPin size={18} strokeWidth={1.75} color={colors.tealPrimary} />
+              <MapPin size={18} strokeWidth={1.75} color={theme.tealPrimary} />
               <View style={s.selectedPlaceText}>
                 <Text style={s.selectedPlaceName} numberOfLines={1}>
                   {selectedPlace.name}
@@ -370,24 +422,24 @@ export default function CreateEventScreen() {
                 hitSlop={8}
                 accessibilityLabel="Clear location"
               >
-                <X size={16} strokeWidth={2} color={colors.textMuted} />
+                <X size={16} strokeWidth={2} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
           ) : (
             <>
               <View style={s.searchRow}>
-                <Search size={16} strokeWidth={1.75} color={colors.textMuted} />
+                <Search size={16} strokeWidth={1.75} color={theme.textMuted} />
                 <TextInput
                   style={s.searchInput}
                   placeholder="Search gyms, parks, venues..."
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={theme.textMuted}
                   value={locationQuery}
                   onChangeText={setLocationQuery}
                   autoCorrect={false}
                   returnKeyType="search"
                 />
                 {(placesLoading || pickingPlace) && (
-                  <ActivityIndicator size="small" color={colors.tealPrimary} />
+                  <ActivityIndicator size="small" color={theme.tealPrimary} />
                 )}
               </View>
               {!placesConfigured && (
@@ -415,7 +467,7 @@ export default function CreateEventScreen() {
                   disabled={pickingPlace}
                 >
                   <View style={s.suggestionIcon}>
-                    <MapPin size={16} strokeWidth={1.75} color={colors.tealPrimary} />
+                    <MapPin size={16} strokeWidth={1.75} color={theme.tealPrimary} />
                   </View>
                   <View style={s.suggestionText}>
                     <Text style={s.suggestionMain} numberOfLines={1}>
@@ -436,7 +488,7 @@ export default function CreateEventScreen() {
           <TextInput
             style={s.input}
             placeholder="Gate, floor, meeting point..."
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.textMuted}
             value={locationDetails}
             onChangeText={setLocationDetails}
             maxLength={500}
@@ -445,7 +497,7 @@ export default function CreateEventScreen() {
           {/* Date */}
           <Text style={s.fieldLabel}>DATE</Text>
           <Pressable style={s.pickerTrigger} onPress={() => togglePicker('date')}>
-            <Calendar size={18} strokeWidth={1.75} color={colors.tealPrimary} />
+            <Calendar size={18} strokeWidth={1.75} color={theme.tealPrimary} />
             <Text style={s.pickerTriggerText}>{formatPickerDate(eventDate)}</Text>
           </Pressable>
           <PickerShell visible={activePicker === 'date'}>
@@ -455,7 +507,7 @@ export default function CreateEventScreen() {
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               minimumDate={new Date()}
               onChange={onDateChange}
-              themeVariant="dark"
+              themeVariant={pickerTheme}
               style={Platform.OS === 'ios' ? s.iosPicker : undefined}
             />
           </PickerShell>
@@ -463,7 +515,7 @@ export default function CreateEventScreen() {
           {/* Times */}
           <Text style={s.fieldLabel}>START TIME</Text>
           <Pressable style={s.pickerTrigger} onPress={() => togglePicker('start')}>
-            <Clock size={18} strokeWidth={1.75} color={colors.tealPrimary} />
+            <Clock size={18} strokeWidth={1.75} color={theme.tealPrimary} />
             <Text style={s.pickerTriggerText}>{formatPickerTime(startTime)}</Text>
           </Pressable>
           <PickerShell visible={activePicker === 'start'}>
@@ -472,14 +524,14 @@ export default function CreateEventScreen() {
               mode="time"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={onStartTimeChange}
-              themeVariant="dark"
+              themeVariant={pickerTheme}
               style={Platform.OS === 'ios' ? s.iosPicker : undefined}
             />
           </PickerShell>
 
           <Text style={s.fieldLabel}>END TIME</Text>
           <Pressable style={s.pickerTrigger} onPress={() => togglePicker('end')}>
-            <Clock size={18} strokeWidth={1.75} color={colors.tealPrimary} />
+            <Clock size={18} strokeWidth={1.75} color={theme.tealPrimary} />
             <Text style={s.pickerTriggerText}>{formatPickerTime(endTime)}</Text>
           </Pressable>
           <PickerShell visible={activePicker === 'end'}>
@@ -488,7 +540,7 @@ export default function CreateEventScreen() {
               mode="time"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={onEndTimeChange}
-              themeVariant="dark"
+              themeVariant={pickerTheme}
               style={Platform.OS === 'ios' ? s.iosPicker : undefined}
             />
           </PickerShell>
@@ -498,12 +550,23 @@ export default function CreateEventScreen() {
           <TextInput
             style={s.input}
             placeholder="e.g. 50"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.textMuted}
             value={maxCapacity}
             onChangeText={setMaxCapacity}
             keyboardType="number-pad"
             maxLength={5}
           />
+
+          {!canSubmit && submitBlockers.length > 0 ? (
+            <View style={s.blockerBox}>
+              <Text style={s.blockerTitle}>Still needed:</Text>
+              {submitBlockers.map((line) => (
+                <Text key={line} style={s.blockerLine}>
+                  • {line}
+                </Text>
+              ))}
+            </View>
+          ) : null}
 
           <TouchableOpacity
             style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
@@ -512,7 +575,7 @@ export default function CreateEventScreen() {
             activeOpacity={0.85}
           >
             {isPending ? (
-              <ActivityIndicator color={colors.onTeal} />
+              <ActivityIndicator color={theme.onTeal} />
             ) : (
               <Text style={s.submitBtnText}>CREATE EVENT</Text>
             )}
@@ -523,265 +586,292 @@ export default function CreateEventScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bgPrimary },
-  navSafe: {
-    backgroundColor: colors.bgPrimary,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    minHeight: 44,
-  },
-  navSide: {
-    width: 72,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  navSideRight: { alignItems: 'flex-end' },
-  navTitleWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -8,
-  },
-  screenTitle: {
-    fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  submitBtn: {
-    marginTop: 32,
-    backgroundColor: colors.tealPrimary,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-    ...shadows.teal,
-  },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitBtnText: {
-    fontFamily: fonts.button,
-    fontSize: 15,
-    color: colors.onTeal,
-    letterSpacing: 1,
-  },
-  scroll: { paddingBottom: 48 },
-  form: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  fieldLabel: {
-    fontFamily: fonts.label,
-    fontSize: 10,
-    color: colors.purpleSoft,
-    letterSpacing: 1.5,
-    marginBottom: 8,
-    marginTop: 20,
-  },
-  fieldLabelFirst: { marginTop: 0 },
-  input: {
-    backgroundColor: colors.surface1,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 14,
-  },
-  charCount: {
-    fontFamily: fonts.caption,
-    fontSize: 11,
-    color: colors.textMuted,
-    textAlign: 'right',
-    marginTop: 5,
-  },
-  bannerBox: {
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    backgroundColor: colors.surface1,
-    aspectRatio: 16 / 9,
-  },
-  bannerPress: { flex: 1, width: '100%' },
-  bannerImg: { width: '100%', height: '100%', minHeight: 160 },
-  bannerPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    minHeight: 160,
-  },
-  bannerHint: {
-    fontFamily: fonts.caption,
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  bannerRemove: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 9,
-  },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 9999,
-    backgroundColor: colors.surface1,
-    borderWidth: 1.5,
-    borderColor: colors.surface3,
-  },
-  chipActive: {
-    backgroundColor: colors.surface2,
-    borderColor: colors.tealPrimary,
-  },
-  chipText: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  chipTextActive: { color: colors.tealPrimary },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: colors.textPrimary,
-    padding: 0,
-  },
-  selectedPlaceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.tealPrimary,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  selectedPlaceText: { flex: 1 },
-  selectedPlaceName: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  selectedPlaceAddress: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  suggestionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
-  },
-  suggestionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  suggestionText: { flex: 1 },
-  suggestionMain: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  suggestionSub: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  hint: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 8,
-  },
-  hintWarn: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.warning,
-    marginTop: 8,
-  },
-  hintError: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.error,
-    marginTop: 8,
-  },
-  pickerTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  pickerTriggerText: {
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  pickerShell: {
-    height: IOS_PICKER_HEIGHT,
-    marginTop: 4,
-    marginBottom: 4,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  iosPicker: {
-    height: IOS_PICKER_HEIGHT,
-    width: '100%',
-  },
-});
+function createStyles(theme: ThemeType, pageBg: string) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: pageBg },
+    navSafe: {
+      backgroundColor: pageBg,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.surface3,
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingBottom: 10,
+      minHeight: 44,
+    },
+    navSide: {
+      width: 72,
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+    },
+    navSideRight: { alignItems: 'flex-end' },
+    navTitleWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    backBtn: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: -8,
+    },
+    screenTitle: {
+      fontFamily: fonts.h2,
+      fontSize: 16,
+      color: theme.textPrimary,
+      letterSpacing: 0.5,
+      textAlign: 'center',
+    },
+    blockerBox: {
+      marginBottom: 14,
+      padding: 14,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      backgroundColor: theme.surface1,
+      gap: 4,
+    },
+    blockerTitle: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 13,
+      color: theme.textPrimary,
+      marginBottom: 4,
+    },
+    blockerLine: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.textMuted,
+      lineHeight: 18,
+    },
+    submitBtn: {
+      marginTop: 32,
+      backgroundColor: theme.tealPrimary,
+      borderRadius: radius.md,
+      paddingVertical: 16,
+      alignItems: 'center',
+      ...theme.shadows.teal,
+    },
+    submitBtnDisabled: { opacity: 0.5 },
+    submitBtnText: {
+      fontFamily: fonts.button,
+      fontSize: 15,
+      color: theme.onTeal,
+      letterSpacing: 1,
+    },
+    scroll: { paddingBottom: 48 },
+    form: {
+      paddingHorizontal: 20,
+      paddingTop: 20,
+    },
+    fieldLabel: {
+      fontFamily: fonts.label,
+      fontSize: 10,
+      color: theme.purpleSoft,
+      letterSpacing: 1.5,
+      marginBottom: 8,
+      marginTop: 20,
+    },
+    fieldLabelFirst: { marginTop: 0 },
+    input: {
+      backgroundColor: theme.surface1,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontFamily: fonts.body,
+      fontSize: 15,
+      color: theme.textPrimary,
+    },
+    textArea: {
+      minHeight: 100,
+      paddingTop: 14,
+    },
+    charCount: {
+      fontFamily: fonts.caption,
+      fontSize: 11,
+      color: theme.textMuted,
+      textAlign: 'right',
+      marginTop: 5,
+    },
+    bannerBox: {
+      borderRadius: radius.md,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      backgroundColor: theme.surface1,
+      aspectRatio: 16 / 9,
+    },
+    bannerPress: { flex: 1, width: '100%' },
+    bannerImg: { width: '100%', height: '100%', minHeight: 160 },
+    bannerPlaceholder: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      minHeight: 160,
+    },
+    bannerHint: {
+      fontFamily: fonts.caption,
+      fontSize: 13,
+      color: theme.textMuted,
+    },
+    bannerRemove: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      width: 28,
+      height: 28,
+      borderRadius: 9999,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chipGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 9,
+    },
+    chip: {
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 9999,
+      backgroundColor: theme.surface1,
+      borderWidth: 1.5,
+      borderColor: theme.surface3,
+    },
+    chipActive: {
+      backgroundColor: theme.surface2,
+      borderColor: theme.tealPrimary,
+    },
+    chipText: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 13,
+      color: theme.textMuted,
+    },
+    chipTextActive: { color: theme.tealPrimary },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.surface1,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    searchInput: {
+      flex: 1,
+      fontFamily: fonts.body,
+      fontSize: 15,
+      color: theme.textPrimary,
+      padding: 0,
+    },
+    selectedPlaceCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.surface1,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.tealPrimary,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    selectedPlaceText: { flex: 1 },
+    selectedPlaceName: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 15,
+      color: theme.textPrimary,
+    },
+    selectedPlaceAddress: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.textMuted,
+      marginTop: 2,
+    },
+    suggestionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.surface3,
+    },
+    suggestionIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.sm,
+      backgroundColor: theme.surface2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    suggestionText: { flex: 1 },
+    suggestionMain: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 14,
+      color: theme.textPrimary,
+    },
+    suggestionSub: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.textMuted,
+      marginTop: 2,
+    },
+    hint: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.textMuted,
+      marginTop: 8,
+    },
+    hintWarn: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.warning,
+      marginTop: 8,
+    },
+    hintError: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.error,
+      marginTop: 8,
+    },
+    pickerTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.surface1,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    pickerTriggerText: {
+      fontFamily: fonts.body,
+      fontSize: 15,
+      color: theme.textPrimary,
+    },
+    pickerShell: {
+      height: IOS_PICKER_HEIGHT,
+      marginTop: 4,
+      marginBottom: 4,
+      overflow: 'hidden',
+      justifyContent: 'center',
+      backgroundColor: theme.surface1,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+    },
+    iosPicker: {
+      height: IOS_PICKER_HEIGHT,
+      width: '100%',
+    },
+  });
+}

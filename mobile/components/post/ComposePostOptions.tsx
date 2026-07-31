@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { MapPin, AtSign, ChevronRight, X, Search } from 'lucide-react-native';
 import UserAvatar from '@/components/ui/UserAvatar';
-import { colors, fonts, radius, shadows } from '@/constants/theme';
+import { fonts, radius, type ThemeType } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { usePlaceAutocomplete, usePlacesStatus } from '@/hooks/usePlaces';
 import { useUserSearch } from '@/hooks/useSearch';
@@ -37,12 +38,14 @@ interface Props {
 const MAX_TAGS = 10;
 
 function ExpandChevron({ open }: { open: boolean }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => createStyles(theme), [theme]);
   return (
     <View style={s.chevronSlot}>
       <ChevronRight
         size={18}
         strokeWidth={1.75}
-        color={colors.textMuted}
+        color={theme.textMuted}
         style={open ? s.chevronOpen : undefined}
       />
     </View>
@@ -56,6 +59,8 @@ export default function ComposePostOptions({
   onTaggedUsersChange,
   excludeUserId,
 }: Props) {
+  const { theme } = useTheme();
+  const s = useMemo(() => createStyles(theme), [theme]);
   const [locationOpen, setLocationOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [locationQuery, setLocationQuery] = useState('');
@@ -157,7 +162,7 @@ export default function ComposePostOptions({
             <MapPin
               size={18}
               strokeWidth={1.75}
-              color={location ? colors.tealPrimary : colors.textMuted}
+              color={location ? theme.tealPrimary : theme.textMuted}
             />
           </View>
           <View style={s.optionTextWrap}>
@@ -174,7 +179,7 @@ export default function ComposePostOptions({
         </Pressable>
         {location ? (
           <Pressable onPress={clearLocation} hitSlop={8} style={s.clearHit}>
-            <X size={16} strokeWidth={2} color={colors.textMuted} />
+            <X size={16} strokeWidth={2} color={theme.textMuted} />
           </Pressable>
         ) : null}
       </View>
@@ -182,11 +187,11 @@ export default function ComposePostOptions({
       {locationOpen && !location && (
         <View style={s.optionExpand}>
           <View style={s.searchBox}>
-            <Search size={16} strokeWidth={1.75} color={colors.textMuted} />
+            <Search size={16} strokeWidth={1.75} color={theme.textMuted} />
             <TextInput
               style={s.searchInput}
               placeholder="Search for a place..."
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={theme.textMuted}
               value={locationQuery}
               onChangeText={setLocationQuery}
               autoFocus
@@ -194,7 +199,7 @@ export default function ComposePostOptions({
               returnKeyType="search"
             />
             {(placesLoading || pickingPlace) && (
-              <ActivityIndicator size="small" color={colors.tealPrimary} />
+              <ActivityIndicator size="small" color={theme.tealPrimary} />
             )}
           </View>
 
@@ -226,7 +231,7 @@ export default function ComposePostOptions({
               disabled={pickingPlace}
             >
               <View style={s.suggestionIcon}>
-                <MapPin size={16} strokeWidth={1.75} color={colors.tealPrimary} />
+                <MapPin size={16} strokeWidth={1.75} color={theme.tealPrimary} />
               </View>
               <View style={s.suggestionText}>
                 <Text style={s.suggestionMain} numberOfLines={1}>
@@ -252,7 +257,7 @@ export default function ComposePostOptions({
             <AtSign
               size={18}
               strokeWidth={1.75}
-              color={taggedUsers.length > 0 ? colors.tealPrimary : colors.textMuted}
+              color={taggedUsers.length > 0 ? theme.tealPrimary : theme.textMuted}
             />
           </View>
           <View style={s.optionTextWrap}>
@@ -270,18 +275,18 @@ export default function ComposePostOptions({
       {tagsOpen && (
         <View style={s.optionExpand}>
           <View style={s.searchBox}>
-            <AtSign size={16} strokeWidth={1.75} color={colors.purpleSoft} />
+            <AtSign size={16} strokeWidth={1.75} color={theme.purpleSoft} />
             <TextInput
               style={s.searchInput}
               placeholder="Search username or name"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={theme.textMuted}
               value={tagQuery}
               onChangeText={setTagQuery}
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
             />
-            {usersLoading && <ActivityIndicator size="small" color={colors.tealPrimary} />}
+            {usersLoading && <ActivityIndicator size="small" color={theme.tealPrimary} />}
           </View>
 
           {usersError && debouncedTagQ.length >= 1 && (
@@ -320,7 +325,7 @@ export default function ComposePostOptions({
                   <UserAvatar name={user.displayName} avatarUrl={user.avatarUrl} size={22} />
                   <Text style={s.tagPillText}>@{user.username}</Text>
                   <Pressable onPress={() => removeTaggedUser(user.id)} hitSlop={6}>
-                    <X size={12} strokeWidth={2.5} color={colors.purpleSoft} />
+                    <X size={12} strokeWidth={2.5} color={theme.purpleSoft} />
                   </Pressable>
                 </View>
               ))}
@@ -332,161 +337,163 @@ export default function ComposePostOptions({
   );
 }
 
-const s = StyleSheet.create({
-  optionsCard: {
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    overflow: 'hidden',
-    ...shadows.sm,
-  },
-  optionsRim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.035)',
-    zIndex: 1,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 56,
-    paddingRight: 10,
-  },
-  optionRowPress: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  chevronSlot: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chevronOpen: {
-    transform: [{ rotate: '90deg' }],
-  },
-  optionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionTextWrap: { flex: 1, minWidth: 0 },
-  optionLabel: { fontFamily: fonts.body, fontSize: 15, color: colors.textPrimary },
-  optionValue: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.tealPrimary,
-    marginTop: 2,
-  },
-  optionHint: {
-    fontFamily: fonts.caption,
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  clearHit: { padding: 8, marginRight: 4 },
-  optionDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.surface3,
-    marginLeft: 62,
-  },
-  optionExpand: { paddingHorizontal: 14, paddingBottom: 14, gap: 8 },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface2,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    paddingHorizontal: 12,
-    gap: 8,
-    minHeight: 46,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: colors.textPrimary,
-    paddingVertical: 10,
-  },
-  suggestionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
-  },
-  suggestionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  suggestionText: { flex: 1, minWidth: 0 },
-  suggestionMain: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  suggestionSub: {
-    fontFamily: fonts.caption,
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  hint: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.textMuted,
-    paddingHorizontal: 4,
-  },
-  hintWarn: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: colors.purpleSoft,
-    paddingHorizontal: 4,
-    lineHeight: 18,
-  },
-  hintError: {
-    fontFamily: fonts.caption,
-    fontSize: 12,
-    color: '#E57373',
-    paddingHorizontal: 4,
-  },
-  tagPills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-  },
-  tagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    borderRadius: radius.full,
-    paddingLeft: 6,
-    paddingRight: 10,
-    paddingVertical: 5,
-  },
-  tagPillText: { fontFamily: fonts.bodyStrong, fontSize: 12, color: colors.purpleSoft },
-});
+function createStyles(theme: ThemeType) {
+  return StyleSheet.create({
+    optionsCard: {
+      backgroundColor: theme.surface1,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      overflow: 'hidden',
+      ...theme.shadows.sm,
+    },
+    optionsRim: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 1,
+      backgroundColor: 'rgba(255,255,255,0.035)',
+      zIndex: 1,
+    },
+    optionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 56,
+      paddingRight: 10,
+    },
+    optionRowPress: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 12,
+    },
+    chevronSlot: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chevronOpen: {
+      transform: [{ rotate: '90deg' }],
+    },
+    optionIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.sm,
+      backgroundColor: theme.surface2,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    optionTextWrap: { flex: 1, minWidth: 0 },
+    optionLabel: { fontFamily: fonts.body, fontSize: 15, color: theme.textPrimary },
+    optionValue: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.tealPrimary,
+      marginTop: 2,
+    },
+    optionHint: {
+      fontFamily: fonts.caption,
+      fontSize: 11,
+      color: theme.textMuted,
+      marginTop: 2,
+    },
+    clearHit: { padding: 8, marginRight: 4 },
+    optionDivider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: theme.surface3,
+      marginLeft: 62,
+    },
+    optionExpand: { paddingHorizontal: 14, paddingBottom: 14, gap: 8 },
+    searchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface2,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      paddingHorizontal: 12,
+      gap: 8,
+      minHeight: 46,
+    },
+    searchInput: {
+      flex: 1,
+      fontFamily: fonts.body,
+      fontSize: 15,
+      color: theme.textPrimary,
+      paddingVertical: 10,
+    },
+    suggestionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.surface3,
+    },
+    suggestionIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.sm,
+      backgroundColor: theme.surface2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    suggestionText: { flex: 1, minWidth: 0 },
+    suggestionMain: {
+      fontFamily: fonts.bodyStrong,
+      fontSize: 14,
+      color: theme.textPrimary,
+    },
+    suggestionSub: {
+      fontFamily: fonts.caption,
+      fontSize: 11,
+      color: theme.textMuted,
+      marginTop: 2,
+    },
+    hint: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.textMuted,
+      paddingHorizontal: 4,
+    },
+    hintWarn: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: theme.purpleSoft,
+      paddingHorizontal: 4,
+      lineHeight: 18,
+    },
+    hintError: {
+      fontFamily: fonts.caption,
+      fontSize: 12,
+      color: '#E57373',
+      paddingHorizontal: 4,
+    },
+    tagPills: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 4,
+    },
+    tagPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: theme.surface2,
+      borderWidth: 1,
+      borderColor: theme.surface3,
+      borderRadius: radius.full,
+      paddingLeft: 6,
+      paddingRight: 10,
+      paddingVertical: 5,
+    },
+    tagPillText: { fontFamily: fonts.bodyStrong, fontSize: 12, color: theme.purpleSoft },
+  });
+}

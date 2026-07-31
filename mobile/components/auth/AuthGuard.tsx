@@ -1,9 +1,10 @@
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
-import { colors } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
   const isLoading = useAuthStore((s) => s.isLoading);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
@@ -12,12 +13,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       <View
         style={{
           flex: 1,
-          backgroundColor: colors.bgPrimary,
+          backgroundColor: theme.bgPrimary,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <ActivityIndicator size="large" color={colors.tealPrimary} />
+        <ActivityIndicator size="large" color={theme.tealPrimary} />
       </View>
     );
   }

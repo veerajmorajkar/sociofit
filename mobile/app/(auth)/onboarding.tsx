@@ -1,7 +1,9 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { fonts, radius } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
+import MFMLogo from '@/components/ui/MFMLogo';
+import { MFM_LOGO_HERO_WIDTH } from '@/constants/branding';
 
 export default function OnboardingScreen() {
   const { theme } = useTheme();
@@ -15,29 +17,8 @@ export default function OnboardingScreen() {
         alignItems: 'center',
       }}
     >
-      <Text
-        style={{
-          fontFamily: fonts.h1,
-          fontSize: 38,
-          color: theme.textPrimary,
-          textTransform: 'uppercase',
-          letterSpacing: -1,
-          textAlign: 'center',
-        }}
-      >
-        SocioFit<Text style={{ color: theme.tealPrimary }}>.</Text>
-      </Text>
-      <Text
-        style={{
-          fontFamily: fonts.body,
-          fontSize: 16,
-          color: theme.textSecondary,
-          textAlign: 'center',
-          marginTop: 12,
-          marginBottom: 48,
-          lineHeight: 24,
-        }}
-      >
+      <MFMLogo width={MFM_LOGO_HERO_WIDTH - 24} />
+      <Text style={[s.body, { color: theme.textSecondary }]}>
         Connect with fitness enthusiasts.{'\n'}Discover events near you.
       </Text>
 
@@ -79,3 +60,14 @@ export default function OnboardingScreen() {
     </View>
   );
 }
+
+const s = StyleSheet.create({
+  body: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 48,
+    lineHeight: 24,
+  },
+});

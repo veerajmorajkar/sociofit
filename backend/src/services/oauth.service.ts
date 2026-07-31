@@ -3,13 +3,19 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { eq, or } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '../config/database.js';
-import { users, refreshTokens } from '../db/schema.js';
-import { signAccessToken, signRefreshToken } from '../utils/jwt.js';
+import { users, accountLinkTokens } from '../db/schema.js';
 import { ensureClubAnnouncementChannel } from './messaging-club.service.js';
 import { env } from '../config/env.js';
+import { issueSession, type RequestMeta } from './session.service.js';
+import { logAuthEvent } from './audit-log.service.js';
+import { comparePassword } from '../utils/hash.js';
+import { toOwnerUserProfile } from '../types/user-dto.js';
+import { maskEmail } from './otp.service.js';
 
 const googleClient = new OAuth2Client();
 const appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
+
+const LINK_TOKEN_TTL_MS = 15 * 60 * 1000; // short-lived — must be confirmed promptly
 
 export interface OAuthProfile {
   provider: 'google' | 'apple';
@@ -38,7 +44,8 @@ export async function verifyGoogleIdToken(idToken: string): Promise<OAuthProfile
   return {
     provider: 'google',
     providerId: payload.sub,
-    email: payload.email ?? null,
+    // Only trust the email if Google says it's actually verified.
+    email: payload.email_verified ? (payload.email ?? null) : null,
     displayName: payload.name ?? payload.email?.split('@')[0] ?? 'Athlete',
   };
 }
@@ -54,7 +61,9 @@ export async function verifyAppleIdentityToken(identityToken: string): Promise<O
   const sub = payload.sub;
   if (!sub) throw new Error('Invalid Apple token');
 
-  const email = typeof payload.email === 'string' ? payload.email : null;
+  // Apple's `email_verified` claim can be a boolean or the string "true".
+  const emailVerified = payload.email_verified === true || payload.email_verified === 'true';
+  const email = emailVerified && typeof payload.email === 'string' ? payload.email : null;
 
   return {
     provider: 'apple',
@@ -88,37 +97,11 @@ async function uniqueUsername(base: string): Promise<string> {
   return `user_${crypto.randomBytes(4).toString('hex')}`;
 }
 
-async function issueTokens(userId: string, accountType: string) {
-  const accessToken = signAccessToken({ userId, accountType });
-  const refreshToken = signRefreshToken(userId);
-  const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-  await db.insert(refreshTokens).values({ userId, tokenHash, expiresAt });
-
-  return { accessToken, refreshToken };
-}
-
-function publicUser(user: {
-  id: string;
-  email: string | null;
-  phone: string | null;
-  accountType: string;
-  displayName: string;
-  username: string;
-  avatarUrl: string | null;
-  bio: string | null;
-}) {
-  return {
-    id: user.id,
-    email: user.email,
-    phone: user.phone,
-    accountType: user.accountType,
-    displayName: user.displayName,
-    username: user.username,
-    avatarUrl: user.avatarUrl,
-    bio: user.bio,
-  };
+async function issueTokens(
+  user: { id: string; accountType: string; tokenVersion: number | null },
+  meta: RequestMeta = {},
+) {
+  return issueSession(user, meta);
 }
 
 export async function authenticateOAuthUser(params: {
@@ -126,8 +109,9 @@ export async function authenticateOAuthUser(params: {
   mode: 'login' | 'signup';
   accountType?: 'personal' | 'club';
   fullName?: { givenName?: string; familyName?: string };
+  meta?: RequestMeta;
 }) {
-  const { profile, mode, accountType = 'personal', fullName } = params;
+  const { profile, mode, accountType = 'personal', fullName, meta = {} } = params;
 
   const idColumn = profile.provider === 'google' ? users.googleId : users.appleId;
 
@@ -139,33 +123,53 @@ export async function authenticateOAuthUser(params: {
   if (byProvider) {
     if (!byProvider.isActive) throw new Error('Account is deactivated');
 
-    const tokens = await issueTokens(byProvider.id, byProvider.accountType);
+    const tokens = await issueTokens(byProvider, meta);
     const needsProfile = !byProvider.activities?.length || byProvider.activities.length < 3;
 
     return {
-      user: publicUser(byProvider),
+      user: toOwnerUserProfile(byProvider),
       ...tokens,
       needsProfile,
+      needsLinkConfirmation: false as const,
     };
   }
 
   if (profile.email) {
     const [byEmail] = await db.select().from(users).where(eq(users.email, profile.email)).limit(1);
-    if (byEmail) {
-      await db
-        .update(users)
-        .set({
-          [profile.provider === 'google' ? 'googleId' : 'appleId']: profile.providerId,
-          authProvider: profile.provider,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, byEmail.id));
 
-      const tokens = await issueTokens(byEmail.id, byEmail.accountType);
+    // Only a *verified* local account is treated as a takeover risk worth
+    // gating behind confirmation. An email match against an unverified
+    // account is ignored entirely — surfacing it (even as "please confirm")
+    // would let an attacker probe for the existence of a real account by
+    // squatting the address first, and unverified rows aren't a trustworthy
+    // signal that the OAuth user actually owns that mailbox's other account.
+    if (byEmail && byEmail.passwordHash && byEmail.authProvider === 'email' && byEmail.isVerified) {
+      const linkToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(linkToken).digest('hex');
+
+      await db.insert(accountLinkTokens).values({
+        existingUserId: byEmail.id,
+        provider: profile.provider,
+        providerId: profile.providerId,
+        oauthEmail: profile.email,
+        tokenHash,
+        expiresAt: new Date(Date.now() + LINK_TOKEN_TTL_MS),
+      });
+
+      await logAuthEvent({
+        userId: byEmail.id,
+        eventType: 'account_link_requested',
+        method: profile.provider,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        metadata: { provider: profile.provider },
+      });
+
       return {
-        user: publicUser(byEmail),
-        ...tokens,
-        needsProfile: !byEmail.activities?.length || byEmail.activities.length < 3,
+        needsLinkConfirmation: true as const,
+        linkToken,
+        maskedEmail: maskEmail(profile.email),
+        provider: profile.provider,
       };
     }
   }
@@ -193,16 +197,7 @@ export async function authenticateOAuthUser(params: {
       : { appleId: profile.providerId }),
   };
 
-  const [newUser] = await db.insert(users).values(insertValues).returning({
-    id: users.id,
-    email: users.email,
-    phone: users.phone,
-    accountType: users.accountType,
-    displayName: users.displayName,
-    username: users.username,
-    avatarUrl: users.avatarUrl,
-    bio: users.bio,
-  });
+  const [newUser] = await db.insert(users).values(insertValues).returning();
 
   if (!newUser) throw new Error('Failed to create user');
 
@@ -210,20 +205,96 @@ export async function authenticateOAuthUser(params: {
     await ensureClubAnnouncementChannel(newUser.id);
   }
 
-  const tokens = await issueTokens(newUser.id, newUser.accountType);
+  const tokens = await issueTokens(newUser, meta);
 
   return {
-    user: publicUser(newUser),
+    user: toOwnerUserProfile(newUser),
     ...tokens,
     needsProfile: true,
+    needsLinkConfirmation: false as const,
+  };
+}
+
+/**
+ * Second step of the OAuth-account-takeover fix: the user has been shown
+ * "an account with this email already exists — link it?" and must now prove
+ * ownership of that EXISTING account with its current password before the
+ * OAuth identity is attached to it.
+ */
+export async function confirmAccountLink(params: {
+  linkToken: string;
+  password: string;
+  meta?: RequestMeta;
+}) {
+  const { linkToken, password, meta = {} } = params;
+  const tokenHash = crypto.createHash('sha256').update(linkToken).digest('hex');
+
+  const [record] = await db
+    .select()
+    .from(accountLinkTokens)
+    .where(eq(accountLinkTokens.tokenHash, tokenHash))
+    .limit(1);
+
+  if (!record || record.consumedAt || record.expiresAt < new Date()) {
+    throw new Error('Link request expired — please try signing in again');
+  }
+
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, record.existingUserId))
+    .limit(1);
+
+  if (!existing || !existing.passwordHash) {
+    throw new Error('Account not found');
+  }
+
+  const validPassword = await comparePassword(password, existing.passwordHash);
+  if (!validPassword) {
+    throw new Error('Incorrect password');
+  }
+
+  const providerColumn = record.provider === 'google' ? 'googleId' : 'appleId';
+  const [linked] = await db
+    .update(users)
+    .set({
+      [providerColumn]: record.providerId,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, existing.id))
+    .returning();
+
+  if (!linked) throw new Error('Failed to link account');
+
+  await db
+    .update(accountLinkTokens)
+    .set({ consumedAt: new Date() })
+    .where(eq(accountLinkTokens.id, record.id));
+
+  await logAuthEvent({
+    userId: existing.id,
+    eventType: 'account_linked',
+    method: record.provider,
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+    metadata: { provider: record.provider, providerId: record.providerId },
+  });
+
+  const tokens = await issueTokens(linked, meta);
+
+  return {
+    user: toOwnerUserProfile(linked),
+    ...tokens,
+    needsProfile: !linked.activities?.length || linked.activities.length < 3,
   };
 }
 
 export async function completeOAuthProfile(params: {
   userId: string;
+  displayName?: string;
   username?: string;
   accountType?: 'personal' | 'club';
-  birthdate?: string;
+  birthdate: string;
   activities: string[];
 }) {
   const [user] = await db.select().from(users).where(eq(users.id, params.userId)).limit(1);
@@ -241,23 +312,16 @@ export async function completeOAuthProfile(params: {
   const [updated] = await db
     .update(users)
     .set({
+      displayName: params.displayName?.trim().slice(0, 100) ?? user.displayName,
       username: params.username ?? user.username,
       accountType: params.accountType ?? user.accountType,
-      dateOfBirth: params.birthdate ? new Date(params.birthdate) : user.dateOfBirth,
+      dateOfBirth: new Date(params.birthdate),
       activities: params.activities,
+      isVerified: true,
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id))
-    .returning({
-      id: users.id,
-      email: users.email,
-      phone: users.phone,
-      accountType: users.accountType,
-      displayName: users.displayName,
-      username: users.username,
-      avatarUrl: users.avatarUrl,
-      bio: users.bio,
-    });
+    .returning();
 
   if (!updated) throw new Error('Failed to update profile');
 
@@ -265,10 +329,10 @@ export async function completeOAuthProfile(params: {
     await ensureClubAnnouncementChannel(updated.id);
   }
 
-  const tokens = await issueTokens(updated.id, updated.accountType);
+  const tokens = await issueTokens(updated);
 
   return {
-    user: publicUser(updated),
+    user: toOwnerUserProfile(updated),
     ...tokens,
     needsProfile: false,
   };

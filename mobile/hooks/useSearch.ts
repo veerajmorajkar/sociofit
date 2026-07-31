@@ -3,7 +3,7 @@ import { searchUsers } from '@/services/users.service';
 import { getEvents } from '@/services/events.service';
 import { useAuthStore } from '@/stores/authStore';
 
-export type SearchFilter = 'all' | 'people' | 'clubs' | 'events' | 'location';
+export type SearchFilter = 'all' | 'athletes' | 'clubs' | 'events' | 'location';
 
 export function useUserSearch(query: string) {
   const trimmed = query.trim();
@@ -28,10 +28,11 @@ export function useClubSearch(query: string) {
   });
 }
 
-export function usePeopleSearch(query: string) {
+/** Athlete accounts (`accountType: personal`). */
+export function useAthletesSearch(query: string) {
   const trimmed = query.trim();
   return useQuery({
-    queryKey: ['search', 'people', trimmed],
+    queryKey: ['search', 'athletes', trimmed],
     queryFn: async () => {
       const all = await searchUsers(trimmed);
       return all.filter((u) => u.accountType === 'personal');

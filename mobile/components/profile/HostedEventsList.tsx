@@ -35,7 +35,7 @@ function EventRow({ event, isPast }: { event: Event; isPast?: boolean }) {
           </Text>
         </View>
         <Text style={s.going}>
-          {event.participantCount ?? 0} joined
+          {Math.max(event.participantCount ?? 0, 1)} joined
           {event.maxCapacity ? ` · ${event.maxCapacity} cap` : ''}
         </Text>
       </View>

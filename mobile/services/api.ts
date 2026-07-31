@@ -13,10 +13,22 @@ interface ApiResponse<T> {
   data: T;
   error?: string;
   meta?: {
-    cursor: string | null;
-    hasMore: boolean;
+    cursor?: string | null;
+    hasMore?: boolean;
     total?: number;
+    permissions?: unknown;
+    activity?: unknown;
   };
+}
+
+let isRefreshing = false;
+let refreshQueue: Array<(token: string | null) => void> = [];
+
+function drainRefreshQueue(token: string | null) {
+  for (const callback of refreshQueue) {
+    callback(token);
+  }
+  refreshQueue = [];
 }
 
 class ApiClient {
@@ -64,11 +76,9 @@ class ApiClient {
       );
     }
 
-    // Handle 401 — try token refresh once
     if (response.status === 401 && auth) {
-      const refreshed = await this.refreshToken();
-      if (refreshed) {
-        const newToken = useAuthStore.getState().accessToken;
+      const newToken = await this.refreshTokenWithLock();
+      if (newToken) {
         requestHeaders['Authorization'] = `Bearer ${newToken}`;
         const retryResponse = await fetch(`${this.baseUrl}${path}`, {
           method,
@@ -89,18 +99,43 @@ class ApiClient {
           await useAuthStore.getState().logout();
           throw new Error('Session expired. Please sign in again.');
         }
+        if (!retryResponse.ok || !retryData.success) {
+          throw new Error(retryData.error ?? `Request failed (${retryResponse.status})`);
+        }
         return retryData;
       }
       await useAuthStore.getState().logout();
       throw new Error('Session expired. Please sign in again.');
     }
 
+    if (!response.ok || !data.success) {
+      throw new Error(data.error ?? `Request failed (${response.status})`);
+    }
+
     return data;
   }
 
-  private async refreshToken(): Promise<boolean> {
+  private refreshTokenWithLock(): Promise<string | null> {
+    if (isRefreshing) {
+      return new Promise((resolve) => {
+        refreshQueue.push(resolve);
+      });
+    }
+
+    isRefreshing = true;
+    return this.performRefresh()
+      .then((token) => {
+        drainRefreshQueue(token);
+        return token;
+      })
+      .finally(() => {
+        isRefreshing = false;
+      });
+  }
+
+  private async performRefresh(): Promise<string | null> {
     const refreshToken = useAuthStore.getState().refreshToken;
-    if (!refreshToken) return false;
+    if (!refreshToken) return null;
 
     try {
       const response = await fetch(`${this.baseUrl}/auth/refresh`, {
@@ -109,7 +144,7 @@ class ApiClient {
         body: JSON.stringify({ refreshToken }),
       });
 
-      if (!response.ok) return false;
+      if (!response.ok) return null;
 
       const data = (await response.json()) as ApiResponse<{
         accessToken: string;
@@ -118,11 +153,11 @@ class ApiClient {
 
       if (data.success) {
         await useAuthStore.getState().setTokens(data.data.accessToken, data.data.refreshToken);
-        return true;
+        return data.data.accessToken;
       }
-      return false;
+      return null;
     } catch {
-      return false;
+      return null;
     }
   }
 

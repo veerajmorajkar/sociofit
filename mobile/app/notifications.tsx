@@ -18,7 +18,9 @@ import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
 } from '@/hooks/useNotifications';
-import { colors, fonts, radius } from '@/constants/theme';
+import { useTealRefresh } from '@/hooks/useTealRefresh';
+import { fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { timeAgo } from '@/utils/formatDate';
 import type { AppNotification } from '@/types/notification';
 import { isPostActionNotification } from '@/types/notification';
@@ -39,20 +41,27 @@ function openNotification(item: AppNotification) {
 }
 
 function PostNotificationThumbnail({ imageUrl }: { imageUrl?: string | null }) {
+  const { theme } = useTheme();
   if (imageUrl) {
     return (
       <Image source={{ uri: imageUrl }} style={s.postThumb} contentFit="cover" transition={150} />
     );
   }
-
   return (
-    <View style={[s.postThumb, s.postThumbEmpty]}>
-      <ImageIcon size={20} strokeWidth={1.5} color={colors.textMuted} />
+    <View
+      style={[
+        s.postThumb,
+        s.postThumbEmpty,
+        { backgroundColor: theme.surface2, borderColor: theme.surface3 },
+      ]}
+    >
+      <ImageIcon size={20} strokeWidth={1.5} color={theme.textMuted} />
     </View>
   );
 }
 
 function NotificationRow({ item, onPress }: { item: AppNotification; onPress: () => void }) {
+  const { theme } = useTheme();
   const isPostAction = isPostActionNotification(item.type);
   const postImageUrl = item.data?.postImageUrl;
   const commentPreview = item.type === 'comment' ? (item.data?.commentPreview ?? item.body) : null;
@@ -61,26 +70,32 @@ function NotificationRow({ item, onPress }: { item: AppNotification; onPress: ()
 
   return (
     <TouchableOpacity
-      style={[s.row, !item.isRead && s.rowUnread]}
+      style={[
+        s.row,
+        { borderBottomColor: theme.surface3 },
+        !item.isRead && { backgroundColor: 'rgba(0,200,172,0.06)' },
+      ]}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      <View style={s.dotCol}>{!item.isRead && <View style={s.unreadDot} />}</View>
+      <View style={s.dotCol}>
+        {!item.isRead && <View style={[s.unreadDot, { backgroundColor: theme.tealPrimary }]} />}
+      </View>
       <View style={s.rowContent}>
         <View style={s.rowBody}>
-          <Text style={s.title} numberOfLines={2}>
+          <Text style={[s.title, { color: theme.textPrimary }]} numberOfLines={2}>
             {item.title ?? 'Notification'}
           </Text>
           {showCommentPreview ? (
-            <Text style={s.commentPreview} numberOfLines={2}>
+            <Text style={[s.commentPreview, { color: theme.textSecondary }]} numberOfLines={2}>
               {commentPreview}
             </Text>
           ) : item.body && !isPostAction ? (
-            <Text style={s.body} numberOfLines={2}>
+            <Text style={[s.body, { color: theme.textSecondary }]} numberOfLines={2}>
               {item.body}
             </Text>
           ) : null}
-          <Text style={s.time}>{timeAgo(item.createdAt)}</Text>
+          <Text style={[s.time, { color: theme.textMuted }]}>{timeAgo(item.createdAt)}</Text>
         </View>
         {showPostThumb ? <PostNotificationThumbnail imageUrl={postImageUrl} /> : null}
       </View>
@@ -97,8 +112,12 @@ function NotificationsHeader({
   onMarkAll: () => void;
   markingAll: boolean;
 }) {
+  const { theme } = useTheme();
   return (
-    <SafeAreaView edges={['top']} style={s.navSafe}>
+    <SafeAreaView
+      edges={['top']}
+      style={[s.navSafe, { backgroundColor: theme.bgPrimary, borderBottomColor: theme.surface3 }]}
+    >
       <View style={s.navBar}>
         <View style={s.navSide}>
           <Pressable
@@ -107,16 +126,22 @@ function NotificationsHeader({
             accessibilityLabel="Go back"
             style={s.backHit}
           >
-            <ChevronLeft size={24} strokeWidth={1.75} color={colors.textPrimary} />
+            <ChevronLeft size={24} strokeWidth={1.75} color={theme.textPrimary} />
           </Pressable>
         </View>
         <View style={s.navTitleWrap}>
-          <Text style={s.navTitle}>NOTIFICATIONS</Text>
+          <Text style={[s.navTitle, { color: theme.textPrimary }]}>NOTIFICATIONS</Text>
         </View>
         <View style={[s.navSide, s.navSideRight]}>
           {unreadCount > 0 ? (
             <Pressable onPress={onMarkAll} disabled={markingAll} hitSlop={8} style={s.markAllHit}>
-              <Text style={[s.markAllAction, markingAll && s.markAllActionDisabled]}>
+              <Text
+                style={[
+                  s.markAllAction,
+                  { color: theme.tealPrimary },
+                  markingAll && s.markAllActionDisabled,
+                ]}
+              >
                 {markingAll ? '…' : 'Read all'}
               </Text>
             </Pressable>
@@ -128,8 +153,10 @@ function NotificationsHeader({
 }
 
 export default function NotificationsScreen() {
+  const { theme } = useTheme();
   const isFocused = useIsFocused();
   const { data, isLoading, isError, refetch } = useNotifications();
+  const { refreshListProps } = useTealRefresh(refetch);
   const { mutate: markAll, isPending: markingAll } = useMarkAllNotificationsRead();
   const { mutate: markOne } = useMarkNotificationRead();
 
@@ -151,10 +178,10 @@ export default function NotificationsScreen() {
 
   if (isLoading) {
     return (
-      <View style={s.root}>
+      <View style={[s.root, { backgroundColor: theme.bgPrimary }]}>
         {header}
         <View style={s.centered}>
-          <ActivityIndicator size="large" color={colors.tealPrimary} />
+          <ActivityIndicator size="large" color={theme.tealPrimary} />
         </View>
       </View>
     );
@@ -162,12 +189,17 @@ export default function NotificationsScreen() {
 
   if (isError) {
     return (
-      <View style={s.root}>
+      <View style={[s.root, { backgroundColor: theme.bgPrimary }]}>
         {header}
         <View style={s.centered}>
-          <Text style={s.emptyTitle}>COULDN'T LOAD NOTIFICATIONS</Text>
-          <TouchableOpacity onPress={() => void refetch()} style={s.retryBtn}>
-            <Text style={s.retryBtnText}>RETRY</Text>
+          <Text style={[s.emptyTitle, { color: theme.textPrimary }]}>
+            COULDN'T LOAD NOTIFICATIONS
+          </Text>
+          <TouchableOpacity
+            onPress={() => void refetch()}
+            style={[s.retryBtn, { backgroundColor: theme.tealPrimary }]}
+          >
+            <Text style={[s.retryBtnText, { color: theme.onTeal }]}>RETRY</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -175,14 +207,14 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={s.root}>
+    <View style={[s.root, { backgroundColor: theme.bgPrimary }]}>
       {header}
 
       {!data?.length ? (
         <View style={s.centered}>
-          <Bell size={40} strokeWidth={1.5} color={colors.purpleSoft} />
-          <Text style={s.emptyTitle}>NO NOTIFICATIONS</Text>
-          <Text style={s.emptyBody}>
+          <Bell size={40} strokeWidth={1.5} color={theme.purpleSoft} />
+          <Text style={[s.emptyTitle, { color: theme.textPrimary }]}>NO NOTIFICATIONS</Text>
+          <Text style={[s.emptyBody, { color: theme.textSecondary }]}>
             Likes, comments, follows, and event joins will show up here
           </Text>
         </View>
@@ -199,6 +231,7 @@ export default function NotificationsScreen() {
               }}
             />
           )}
+          {...refreshListProps}
           contentContainerStyle={s.listContent}
           showsVerticalScrollIndicator={false}
         />
@@ -208,15 +241,8 @@ export default function NotificationsScreen() {
 }
 
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  navSafe: {
-    backgroundColor: colors.bgPrimary,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
-  },
+  root: { flex: 1 },
+  navSafe: { borderBottomWidth: StyleSheet.hairlineWidth },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -224,14 +250,8 @@ const s = StyleSheet.create({
     paddingBottom: 10,
     minHeight: 44,
   },
-  navSide: {
-    width: 72,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  navSideRight: {
-    alignItems: 'flex-end',
-  },
+  navSide: { width: 72, alignItems: 'flex-start', justifyContent: 'center' },
+  navSideRight: { alignItems: 'flex-end' },
   backHit: {
     width: 40,
     height: 40,
@@ -239,51 +259,15 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: -8,
   },
-  navTitleWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navTitle: {
-    fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  markAllHit: {
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  markAllAction: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 13,
-    color: colors.tealPrimary,
-  },
-  markAllActionDisabled: {
-    opacity: 0.5,
-  },
-  listContent: {
-    paddingBottom: 24,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  retryBtn: {
-    marginTop: 16,
-    backgroundColor: colors.tealPrimary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-  },
-  retryBtnText: {
-    fontFamily: fonts.button,
-    color: colors.onTeal,
-    letterSpacing: 0.5,
-  },
+  navTitleWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  navTitle: { fontFamily: fonts.h2, fontSize: 16, letterSpacing: 0.5, textAlign: 'center' },
+  markAllHit: { paddingVertical: 6, paddingHorizontal: 4 },
+  markAllAction: { fontFamily: fonts.bodyStrong, fontSize: 13 },
+  markAllActionDisabled: { opacity: 0.5 },
+  listContent: { paddingBottom: 24 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  retryBtn: { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, borderRadius: radius.md },
+  retryBtnText: { fontFamily: fonts.button, letterSpacing: 0.5 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -291,76 +275,25 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
   },
-  rowUnread: { backgroundColor: 'rgba(0,229,196,0.06)' },
-  dotCol: {
-    width: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.tealPrimary,
-  },
-  rowContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
+  dotCol: { width: 8, alignItems: 'center', justifyContent: 'center' },
+  unreadDot: { width: 8, height: 8, borderRadius: 4 },
+  rowContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowBody: { flex: 1, minWidth: 0 },
-  postThumb: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-  },
+  postThumb: { width: 48, height: 48, borderRadius: radius.sm },
   postThumbEmpty: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.surface3,
   },
-  title: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 14,
-    color: colors.textPrimary,
-    lineHeight: 20,
-  },
-  body: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  commentPreview: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  time: {
-    fontFamily: fonts.caption,
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 6,
-  },
-  emptyTitle: {
-    fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
-    marginTop: 16,
-    letterSpacing: 0.5,
-  },
+  title: { fontFamily: fonts.bodyStrong, fontSize: 14, lineHeight: 20 },
+  body: { fontFamily: fonts.body, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  commentPreview: { fontFamily: fonts.body, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  time: { fontFamily: fonts.caption, fontSize: 11, marginTop: 6 },
+  emptyTitle: { fontFamily: fonts.h2, fontSize: 16, marginTop: 16, letterSpacing: 0.5 },
   emptyBody: {
     fontFamily: fonts.body,
     fontSize: 14,
-    color: colors.textSecondary,
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 22,

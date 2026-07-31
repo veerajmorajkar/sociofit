@@ -33,7 +33,7 @@ async function ensureAndroidChannel() {
     name: 'Mumbai Fitness Mafia',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#C8F135',
+    lightColor: '#00E5C3',
     sound: 'default',
   });
 }
@@ -87,6 +87,9 @@ export async function syncPushToken(): Promise<void> {
     await api.put('/users/me/push-token', { token });
     console.log('[push] Push token registered with backend');
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Stale refresh tokens log out via api client — not worth a red screen in dev.
+    if (message.includes('Session expired')) return;
     console.error('[push] Failed to register push token with backend:', err);
   }
 }
@@ -100,11 +103,14 @@ export function handleNotificationTap(
     postId?: string;
     eventId?: string;
     userId?: string;
+    conversationId?: string;
   } | null;
 
   if (!data) return;
 
-  if (data.postId) {
+  if (data.conversationId) {
+    router.push(`/chat/${data.conversationId}`);
+  } else if (data.postId) {
     router.push(`/post/${data.postId}`);
   } else if (data.eventId) {
     router.push(`/event/${data.eventId}`);

@@ -17,6 +17,8 @@ export interface UpdateProfileParams {
   displayName?: string;
   username?: string;
   bio?: string;
+  email?: string;
+  phone?: string;
   avatarUrl?: string | null;
   coverPhotoUrl?: string;
   websiteUrl?: string | null;

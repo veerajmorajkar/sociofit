@@ -3,19 +3,21 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  View,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AuthVideoBackdrop from '@/components/auth/AuthVideoBackdrop';
+import AuthBackButton from '@/components/auth/AuthBackButton';
 
 interface Props {
   children: React.ReactNode;
   contentStyle?: ViewStyle;
+  onBack?: () => void;
+  showBack?: boolean;
 }
 
-export default function AuthFormShell({ children, contentStyle }: Props) {
+export default function AuthFormShell({ children, contentStyle, onBack, showBack = true }: Props) {
   return (
     <AuthVideoBackdrop>
       <StatusBar style="light" />
@@ -26,7 +28,8 @@ export default function AuthFormShell({ children, contentStyle }: Props) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={s.card}>{children}</View>
+            {showBack ? <AuthBackButton onPress={onBack} /> : null}
+            {children}
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -36,13 +39,5 @@ export default function AuthFormShell({ children, contentStyle }: Props) {
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 },
-  card: {
-    backgroundColor: 'rgba(14,14,20,0.72)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-  },
+  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 16, paddingBottom: 40 },
 });

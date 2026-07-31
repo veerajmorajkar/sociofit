@@ -1,11 +1,5 @@
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import PressableScale from '@/components/ui/PressableScale';
 import { fonts, radius } from '@/constants/theme';
 
 type Variant = 'white' | 'purple' | 'apple' | 'ghost';
@@ -20,6 +14,8 @@ interface Props {
   style?: ViewStyle;
 }
 
+// Deliberate fixed pill colors — these sit over the dark auth video in both
+// modes, so they must not swap with the theme.
 const VARIANTS: Record<Variant, { bg: string; text: string; border?: string }> = {
   white: { bg: '#FFFFFF', text: '#5B2ECC' },
   purple: { bg: '#5B2ECC', text: '#FFFFFF' },
@@ -38,7 +34,7 @@ export default function AuthPillButton({
 }: Props) {
   const v = VARIANTS[variant];
   return (
-    <TouchableOpacity
+    <PressableScale
       style={[
         s.btn,
         {
@@ -46,13 +42,15 @@ export default function AuthPillButton({
           borderColor: v.border ?? 'transparent',
           borderWidth: v.border ? 1 : 0,
         },
-        (disabled || loading) && s.disabled,
         style,
       ]}
+      pressedScale={0.97}
+      haptic
       onPress={onPress}
       disabled={disabled || loading}
-      activeOpacity={0.85}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
     >
       {loading ? (
         <ActivityIndicator color={v.text} />
@@ -62,7 +60,7 @@ export default function AuthPillButton({
           <Text style={[s.label, { color: v.text }]}>{label}</Text>
         </View>
       )}
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -79,7 +77,6 @@ const s = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  disabled: { opacity: 0.55 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   label: {
     fontFamily: fonts.h3,

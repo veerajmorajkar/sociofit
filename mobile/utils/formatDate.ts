@@ -83,10 +83,93 @@ export function formatEventDateFull(isoDate: string): string {
 }
 
 /**
+ * Full calendar date for event detail, e.g. "Saturday, 15 November 2026".
+ */
+export function formatEventDetailDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  const weekday = date.toLocaleDateString('en-IN', { weekday: 'long' });
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-IN', { month: 'long' });
+  const year = date.getFullYear();
+  return `${weekday}, ${day}${ordinalSuffix(day)} ${month} ${year}`;
+}
+
+/**
+ * Time only, e.g. "7:00 AM".
+ */
+export function formatEventTime(isoDate: string): string {
+  return new Date(isoDate).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
+ * Compact pill for event detail hero, e.g. "15 Nov · 5:00 PM".
+ */
+export function formatEventDateTimePill(isoDate: string): string {
+  const date = new Date(isoDate);
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-IN', { month: 'short' });
+  const time = date.toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return `${day} ${month} · ${time}`;
+}
+
+/**
  * Formats price in paise to a display string.
  * 0 → "FREE", 50000 → "₹500"
  */
 export function formatPrice(priceInr: number | null): string {
   if (!priceInr || priceInr === 0) return 'FREE';
   return `₹${Math.round(priceInr / 100)}`;
+}
+
+function startOfLocalDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function formatChatShortDate(date: Date): string {
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-IN', { month: 'short' });
+  const year = date.getFullYear();
+  const now = new Date();
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${day} ${month}`;
+  }
+  return `${day} ${month} ${year}`;
+}
+
+/** Day divider in chat — Today, Yesterday · date, or calendar date */
+export function formatChatDayLabel(isoDate: string): string {
+  const date = new Date(isoDate);
+  const today = startOfLocalDay(new Date());
+  const msgDay = startOfLocalDay(date);
+  const diffDays = Math.round((today.getTime() - msgDay.getTime()) / 86_400_000);
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return `Yesterday · ${formatChatShortDate(date)}`;
+
+  const weekday = date.toLocaleDateString('en-IN', { weekday: 'long' });
+  return `${weekday} · ${formatChatShortDate(date)}`;
+}
+
+/** Tap-to-reveal timestamp on a single message */
+export function formatChatMessageTime(isoDate: string): string {
+  return new Date(isoDate).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+export function getChatDayKey(isoDate: string): string {
+  const d = new Date(isoDate);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }

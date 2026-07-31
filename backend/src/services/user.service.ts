@@ -1,8 +1,16 @@
 import { db } from '../config/database.js';
 import { users, follows, posts, clubProfiles } from '../db/schema.js';
-import { eq, and, sql, desc, or, ilike } from 'drizzle-orm';
+import { eq, and, sql, desc, or, ilike, ne } from 'drizzle-orm';
 import type { UpdateProfileInput } from '../schemas/user.schema.js';
+import { normalizePhone } from '../utils/phone.js';
 import { notifyUser } from './notification.service.js';
+import { getModerationContext, isUserHidden } from './moderation.service.js';
+import {
+  getClubAnnouncementMeta,
+  joinClubAnnouncement,
+  leaveClubAnnouncement,
+} from './messaging-club.service.js';
+import { assertOptionalUserMediaUrl } from '../utils/media-url.js';
 
 // ── Get Profile ──────────────────────────────────────────────
 export async function getProfile(userId: string, requestingUserId: string) {
@@ -29,6 +37,11 @@ export async function getProfile(userId: string, requestingUserId: string) {
     .limit(1);
 
   if (!user) return null;
+
+  if (requestingUserId !== userId) {
+    const moderation = await getModerationContext(requestingUserId);
+    if (isUserHidden(moderation, userId)) return null;
+  }
 
   // Follower/following counts
   const [followerCount] = await db
@@ -60,6 +73,7 @@ export async function getProfile(userId: string, requestingUserId: string) {
 
   // Club profile if club account
   let clubProfile = null;
+  let announcementChannel = null;
   if (user.accountType === 'club') {
     const [cp] = await db
       .select()
@@ -67,40 +81,84 @@ export async function getProfile(userId: string, requestingUserId: string) {
       .where(eq(clubProfiles.userId, userId))
       .limit(1);
     clubProfile = cp ?? null;
+    announcementChannel = await getClubAnnouncementMeta(userId, requestingUserId);
   }
 
   return {
     ...user,
+    email: requestingUserId === userId ? user.email : null,
+    phone: requestingUserId === userId ? user.phone : null,
     followerCount: followerCount?.count ?? 0,
     followingCount: followingCount?.count ?? 0,
     postCount: postCount?.count ?? 0,
     isFollowing,
     isOwnProfile: requestingUserId === userId,
     clubProfile,
+    announcementChannel,
   };
 }
 
 // ── Update Profile ───────────────────────────────────────────
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
-  const [updated] = await db
-    .update(users)
-    .set({
-      ...input,
-      latitude: input.latitude?.toString(),
-      longitude: input.longitude?.toString(),
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId))
-    .returning({
-      id: users.id,
-      displayName: users.displayName,
-      username: users.username,
-      bio: users.bio,
-      avatarUrl: users.avatarUrl,
-      coverPhotoUrl: users.coverPhotoUrl,
-      websiteUrl: users.websiteUrl,
-      city: users.city,
-    });
+  await assertOptionalUserMediaUrl(input.avatarUrl, userId, 'avatars');
+  await assertOptionalUserMediaUrl(input.coverPhotoUrl, userId, 'covers');
+
+  const patch: Record<string, unknown> = { ...input, updatedAt: new Date() };
+  if (input.latitude !== undefined) patch.latitude = input.latitude.toString();
+  if (input.longitude !== undefined) patch.longitude = input.longitude.toString();
+  if (input.phone) {
+    patch.phone = normalizePhone(input.phone);
+  }
+
+  // Email/phone can only be *set* here when the account doesn't already have
+  // one (e.g. an OAuth signup filling in a missing contact field). Changing
+  // an existing, already-trusted value must go through the OTP-verified
+  // request-change/confirm-change flow — never a direct write-through.
+  if (input.email !== undefined || patch.phone !== undefined) {
+    const [current] = await db
+      .select({ email: users.email, phone: users.phone })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (input.email !== undefined) {
+      if (current?.email) {
+        throw new Error('Use the email change flow to update an existing email address');
+      }
+    }
+    if (patch.phone !== undefined) {
+      if (current?.phone) {
+        throw new Error('Use the phone change flow to update an existing phone number');
+      }
+    }
+  }
+
+  if (input.email || patch.phone) {
+    const conditions = [];
+    if (input.email) conditions.push(eq(users.email, input.email));
+    if (patch.phone) conditions.push(eq(users.phone, patch.phone as string));
+    if (conditions.length) {
+      const [conflict] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(or(...conditions), ne(users.id, userId)))
+        .limit(1);
+      if (conflict) throw new Error('Email or phone already in use');
+    }
+  }
+
+  const [updated] = await db.update(users).set(patch).where(eq(users.id, userId)).returning({
+    id: users.id,
+    email: users.email,
+    phone: users.phone,
+    displayName: users.displayName,
+    username: users.username,
+    bio: users.bio,
+    avatarUrl: users.avatarUrl,
+    coverPhotoUrl: users.coverPhotoUrl,
+    websiteUrl: users.websiteUrl,
+    city: users.city,
+  });
 
   return updated;
 }
@@ -142,7 +200,7 @@ export async function followUser(followerId: string, followingId: string) {
 
   // Check target exists
   const [target] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, accountType: users.accountType })
     .from(users)
     .where(and(eq(users.id, followingId), eq(users.isActive, true)))
     .limit(1);
@@ -171,13 +229,28 @@ export async function followUser(followerId: string, followingId: string) {
     data: { userId: followerId },
   });
 
+  if (target.accountType === 'club') {
+    await joinClubAnnouncement(followerId, followingId);
+  }
+
   return { following: true };
 }
 
 export async function unfollowUser(followerId: string, followingId: string) {
+  const [target] = await db
+    .select({ accountType: users.accountType })
+    .from(users)
+    .where(eq(users.id, followingId))
+    .limit(1);
+
   await db
     .delete(follows)
     .where(and(eq(follows.followerId, followerId), eq(follows.followingId, followingId)));
+
+  if (target?.accountType === 'club') {
+    await leaveClubAnnouncement(followerId, followingId);
+  }
+
   return { following: false };
 }
 
@@ -185,6 +258,7 @@ export async function unfollowUser(followerId: string, followingId: string) {
 export async function getFollowers(userId: string, cursor?: string, limit = 20) {
   const result = await db
     .select({
+      followId: follows.id,
       id: users.id,
       displayName: users.displayName,
       username: users.username,
@@ -210,8 +284,8 @@ export async function getFollowers(userId: string, cursor?: string, limit = 20) 
   if (hasMore) result.pop();
 
   return {
-    users: result,
-    cursor: hasMore ? (result[result.length - 1]?.id ?? null) : null,
+    users: result.map(({ followId: _followId, ...user }) => user),
+    cursor: hasMore ? (result[result.length - 1]?.followId ?? null) : null,
     hasMore,
   };
 }
@@ -219,6 +293,7 @@ export async function getFollowers(userId: string, cursor?: string, limit = 20) 
 export async function getFollowing(userId: string, cursor?: string, limit = 20) {
   const result = await db
     .select({
+      followId: follows.id,
       id: users.id,
       displayName: users.displayName,
       username: users.username,
@@ -244,8 +319,8 @@ export async function getFollowing(userId: string, cursor?: string, limit = 20) 
   if (hasMore) result.pop();
 
   return {
-    users: result,
-    cursor: hasMore ? (result[result.length - 1]?.id ?? null) : null,
+    users: result.map(({ followId: _followId, ...user }) => user),
+    cursor: hasMore ? (result[result.length - 1]?.followId ?? null) : null,
     hasMore,
   };
 }

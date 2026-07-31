@@ -13,6 +13,7 @@ import {
 import { useRef, useState } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Trash2 } from 'lucide-react-native';
+import ContentActionsMenu from '@/components/moderation/ContentActionsMenu';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PostCard from '@/components/feed/PostCard';
 import CommentListItem from '@/components/feed/CommentListItem';
@@ -21,11 +22,13 @@ import KeyboardStickyFooter from '@/components/ui/KeyboardStickyFooter';
 import { usePostDetail, usePostComments, useAddComment, useDeletePost } from '@/hooks/usePosts';
 import { useLikePost, useRepostPost } from '@/hooks/useFeed';
 import { useAuthStore } from '@/stores/authStore';
-import { colors, fonts, radius } from '@/constants/theme';
+import { fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useBottomBarScrollPadding } from '@/constants/composer';
 import { timeAgo } from '@/utils/formatDate';
 
 export default function PostDetailScreen() {
+  const { theme } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const [commentsY, setCommentsY] = useState(0);
@@ -51,18 +54,21 @@ export default function PostDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={s.centered}>
-        <ActivityIndicator size="large" color={colors.tealPrimary} />
+      <View style={[s.centered, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.tealPrimary} />
       </View>
     );
   }
 
   if (isError || !post) {
     return (
-      <View style={s.centered}>
-        <Text style={s.errTitle}>POST NOT FOUND</Text>
-        <TouchableOpacity onPress={() => void refetch()} style={s.retryBtn}>
-          <Text style={s.retryText}>RETRY</Text>
+      <View style={[s.centered, { backgroundColor: theme.bg }]}>
+        <Text style={[s.errTitle, { color: theme.textPrimary }]}>POST NOT FOUND</Text>
+        <TouchableOpacity
+          onPress={() => void refetch()}
+          style={[s.retryBtn, { backgroundColor: theme.tealPrimary }]}
+        >
+          <Text style={[s.retryText, { color: theme.onTeal }]}>RETRY</Text>
         </TouchableOpacity>
       </View>
     );
@@ -104,19 +110,25 @@ export default function PostDetailScreen() {
   };
 
   return (
-    <View style={s.root}>
-      <SafeAreaView edges={['top']} style={s.navSafe}>
+    <View style={[s.root, { backgroundColor: theme.bg }]}>
+      <SafeAreaView edges={['top']} style={[s.navSafe, { backgroundColor: theme.bgPrimary }]}>
         <View style={s.navBar}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            accessibilityLabel="Go back"
-            style={s.backHit}
-          >
-            <ChevronLeft size={24} strokeWidth={1.75} color={colors.textPrimary} />
-          </Pressable>
-          <Text style={s.navTitle}>POST</Text>
-          <View style={s.navSide} />
+          <View style={s.navSide}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              accessibilityLabel="Go back"
+              style={s.backHit}
+            >
+              <ChevronLeft size={24} strokeWidth={1.75} color={theme.textPrimary} />
+            </Pressable>
+          </View>
+          <View style={s.navTitleWrap}>
+            <Text style={[s.navTitle, { color: theme.textPrimary }]}>POST</Text>
+          </View>
+          <View style={[s.navSide, s.navSideRight]}>
+            <View style={{ width: 40, height: 40 }} />
+          </View>
         </View>
       </SafeAreaView>
 
@@ -146,7 +158,7 @@ export default function PostDetailScreen() {
             reshareCount={post.shareCount ?? 0}
             isLiked={post.isLiked}
             isReposted={post.isReposted ?? false}
-            isVerified={post.author.isVerified}
+            accountType={post.author.accountType}
             avatarInitial={post.author.displayName.charAt(0).toUpperCase()}
             avatarUrl={post.author.avatarUrl}
             mediaUrls={post.media?.map((m) => m.url) ?? []}
@@ -162,33 +174,54 @@ export default function PostDetailScreen() {
                   onPress={onDelete}
                   disabled={deleting}
                   hitSlop={10}
-                  style={s.deleteBtn}
+                  style={[
+                    s.deleteBtn,
+                    { backgroundColor: theme.surface2, borderColor: theme.surface3 },
+                  ]}
                   activeOpacity={0.75}
                 >
                   {deleting ? (
-                    <ActivityIndicator size="small" color={colors.error} />
+                    <ActivityIndicator size="small" color={theme.error} />
                   ) : (
-                    <Trash2 size={18} strokeWidth={1.75} color={colors.error} />
+                    <Trash2 size={18} strokeWidth={1.75} color={theme.error} />
                   )}
                 </TouchableOpacity>
-              ) : undefined
+              ) : (
+                <ContentActionsMenu
+                  variant="icon"
+                  targetType="post"
+                  targetId={post.id}
+                  targetTitle={post.caption?.trim() || 'Post'}
+                  onHidden={() => router.back()}
+                />
+              )
             }
           />
 
           <View style={s.commentsSection} onLayout={(e) => setCommentsY(e.nativeEvent.layout.y)}>
-            <View style={s.sectionDivider} />
+            <View style={[s.sectionDivider, { backgroundColor: theme.surface3 }]} />
 
             {commentsLoading ? (
-              <ActivityIndicator color={colors.tealPrimary} style={s.commentsLoader} />
+              <ActivityIndicator color={theme.tealPrimary} style={s.commentsLoader} />
             ) : commentsError ? (
               <View style={s.commentsEmpty}>
-                <Text style={s.emptyText}>Could not load comments</Text>
-                <TouchableOpacity onPress={() => void refetchComments()} style={s.retryInline}>
-                  <Text style={s.retryInlineText}>Retry</Text>
+                <Text style={[s.emptyText, { color: theme.textMuted }]}>
+                  Could not load comments
+                </Text>
+                <TouchableOpacity
+                  onPress={() => void refetchComments()}
+                  style={[
+                    s.retryInline,
+                    { backgroundColor: theme.surface2, borderColor: theme.surface3 },
+                  ]}
+                >
+                  <Text style={[s.retryInlineText, { color: theme.tealPrimary }]}>Retry</Text>
                 </TouchableOpacity>
               </View>
             ) : comments.length === 0 ? (
-              <Text style={s.emptyText}>No comments yet. Start the conversation.</Text>
+              <Text style={[s.emptyText, { color: theme.textMuted }]}>
+                No comments yet. Start the conversation.
+              </Text>
             ) : (
               <View style={s.commentsList}>
                 {comments.map((c) => (
@@ -201,9 +234,11 @@ export default function PostDetailScreen() {
                     style={s.loadMore}
                   >
                     {loadingMoreComments ? (
-                      <ActivityIndicator size="small" color={colors.tealPrimary} />
+                      <ActivityIndicator size="small" color={theme.tealPrimary} />
                     ) : (
-                      <Text style={s.loadMoreText}>Load older comments</Text>
+                      <Text style={[s.loadMoreText, { color: theme.tealPrimary }]}>
+                        Load older comments
+                      </Text>
                     )}
                   </TouchableOpacity>
                 )}
@@ -212,7 +247,7 @@ export default function PostDetailScreen() {
           </View>
         </ScrollView>
 
-        <KeyboardStickyFooter>
+        <KeyboardStickyFooter variant="comment">
           <CommentComposer
             value={commentText}
             onChangeText={setCommentText}
@@ -228,107 +263,54 @@ export default function PostDetailScreen() {
 }
 
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  keyboardFrame: {
-    flex: 1,
-  },
-  navSafe: {
-    backgroundColor: colors.bgPrimary,
-  },
+  root: { flex: 1 },
+  keyboardFrame: { flex: 1 },
+  navSafe: {},
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingBottom: 10,
     minHeight: 44,
   },
+  navSide: { width: 52, alignItems: 'flex-start', justifyContent: 'center' },
+  navSideRight: { alignItems: 'flex-end' },
   backHit: {
-    width: 44,
-    height: 44,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  navTitle: {
-    fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
-    letterSpacing: 0.5,
-  },
-  navSide: {
-    width: 44,
-  },
-  scroll: { flex: 1 },
-  scrollContent: {
-    paddingTop: 4,
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: colors.bg,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    marginLeft: -8,
   },
-  errTitle: { fontFamily: fonts.h2, color: colors.textPrimary, marginBottom: 16 },
-  retryBtn: {
-    backgroundColor: colors.tealPrimary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-  },
-  retryText: { fontFamily: fonts.button, color: colors.onTeal },
+  navTitleWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  navTitle: { fontFamily: fonts.h2, fontSize: 16, letterSpacing: 0.5 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingTop: 4 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  errTitle: { fontFamily: fonts.h2, marginBottom: 16 },
+  retryBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: radius.md },
+  retryText: { fontFamily: fonts.button },
   deleteBtn: {
     width: 36,
     height: 36,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
     borderWidth: 1,
-    borderColor: colors.surface3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  commentsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.surface3,
-    marginBottom: 12,
-    opacity: 0.65,
-  },
-  commentsList: { gap: 12 },
+  commentsSection: { paddingHorizontal: 16, paddingTop: 4 },
+  sectionDivider: { height: StyleSheet.hairlineWidth, marginBottom: 12, opacity: 0.65 },
+  commentsList: { gap: 10 },
   commentsLoader: { marginVertical: 24 },
   commentsEmpty: { alignItems: 'center', gap: 10, paddingVertical: 16 },
-  emptyText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
+  emptyText: { fontFamily: fonts.body, fontSize: 14, textAlign: 'center', paddingVertical: 12 },
   retryInline: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
     borderWidth: 1,
-    borderColor: colors.surface3,
   },
-  retryInlineText: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 13,
-    color: colors.tealPrimary,
-  },
+  retryInlineText: { fontFamily: fonts.bodyStrong, fontSize: 13 },
   loadMore: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
-  loadMoreText: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.tealPrimary,
-    letterSpacing: 0.5,
-  },
+  loadMoreText: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 0.5 },
 });

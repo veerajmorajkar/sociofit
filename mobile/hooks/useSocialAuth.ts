@@ -5,10 +5,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
 import {
-  GOOGLE_OAUTH_ANDROID_CLIENT_ID,
-  GOOGLE_OAUTH_EXPO_CLIENT_ID,
-  GOOGLE_OAUTH_IOS_CLIENT_ID,
-  GOOGLE_OAUTH_WEB_CLIENT_ID,
+  getGoogleOAuthClientIds,
   isAppleSignInAvailable,
   isGoogleOAuthConfigured,
 } from '@/constants/auth';
@@ -26,24 +23,22 @@ interface Options {
   accountType?: AccountType;
 }
 
-export function useSocialAuth({ mode, accountType }: Options) {
+function useFinishAuth(accountType: AccountType | undefined) {
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [loading, setLoading] = useState<'google' | 'apple' | null>(null);
 
-  const googleConfigured = isGoogleOAuthConfigured();
-  const webClientId = GOOGLE_OAUTH_WEB_CLIENT_ID || GOOGLE_OAUTH_EXPO_CLIENT_ID || undefined;
-
-  const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest({
-    iosClientId: GOOGLE_OAUTH_IOS_CLIENT_ID || webClientId,
-    androidClientId: GOOGLE_OAUTH_ANDROID_CLIENT_ID || webClientId,
-    webClientId,
-    scopes: ['openid', 'profile', 'email'],
-  });
-
-  const finishAuth = useCallback(
+  return useCallback(
     async (result: Awaited<ReturnType<typeof loginWithGoogle>>, provider: 'google' | 'apple') => {
       if (!result.success) {
         Alert.alert('Sign in failed', result.error ?? 'Could not authenticate.');
+        return;
+      }
+
+      if (result.data.needsLinkConfirmation) {
+        const { linkToken, maskedEmail } = result.data;
+        router.push({
+          pathname: '/(auth)/link-account',
+          params: { linkToken, maskedEmail, provider },
+        });
         return;
       }
 
@@ -57,6 +52,7 @@ export function useSocialAuth({ mode, accountType }: Options) {
             accountType: accountType ?? user.accountType ?? 'personal',
             displayName: user.displayName,
             username: user.username,
+            email: user.email ?? '',
             provider,
           },
         });
@@ -67,53 +63,19 @@ export function useSocialAuth({ mode, accountType }: Options) {
     },
     [accountType, setAuth],
   );
+}
 
-  useEffect(() => {
-    if (!googleResponse || googleResponse.type !== 'success') return;
-    const idToken = googleResponse.authentication?.idToken;
-    if (!idToken) {
-      Alert.alert(
-        'Google sign-in',
-        'No identity token returned. Check OAuth client IDs in mobile/.env',
-      );
-      setLoading(null);
-      return;
-    }
+/** Apple + shared helpers — safe to call on every auth screen. */
+export function useSocialAuth({ mode, accountType }: Options) {
+  const [loading, setLoading] = useState<'google' | 'apple' | null>(null);
+  const finishAuth = useFinishAuth(accountType);
 
-    void (async () => {
-      try {
-        const result = await loginWithGoogle({
-          idToken,
-          mode,
-          accountType: mode === 'signup' ? accountType : undefined,
-        });
-        await finishAuth(result, 'google');
-      } catch (err) {
-        Alert.alert(
-          'Connection error',
-          `${err instanceof Error ? err.message : 'Could not reach server.'}\n\nAPI: ${API_URL}`,
-        );
-      } finally {
-        setLoading(null);
-      }
-    })();
-  }, [googleResponse, mode, accountType, finishAuth]);
-
-  const signInWithGoogle = useCallback(async () => {
-    if (!googleConfigured) {
-      Alert.alert(
-        'Google Sign-In',
-        'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (and platform client IDs) to mobile/.env. See mobile/.env.example.',
-      );
-      return;
-    }
-    setLoading('google');
-    try {
-      await promptGoogle();
-    } catch {
-      setLoading(null);
-    }
-  }, [googleConfigured, promptGoogle]);
+  const signInWithGoogleUnavailable = useCallback(() => {
+    Alert.alert(
+      'Google Sign-In',
+      'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (and iOS/Android client IDs) to mobile/.env. See mobile/.env.example.',
+    );
+  }, []);
 
   const signInWithApple = useCallback(async () => {
     if (!isAppleSignInAvailable()) {
@@ -163,10 +125,80 @@ export function useSocialAuth({ mode, accountType }: Options) {
   }, [accountType, finishAuth, mode]);
 
   return {
-    signInWithGoogle,
     signInWithApple,
     loading,
-    googleReady: googleConfigured && !!googleRequest,
+    setLoading,
+    finishAuth,
+    signInWithGoogleUnavailable,
     appleReady: isAppleSignInAvailable(),
+    googleReady: false,
+    signInWithGoogle: signInWithGoogleUnavailable,
+  };
+}
+
+/**
+ * Google OAuth hook — only mount via `SocialAuthButtonsWithGoogle`.
+ * Must not run unless client IDs are configured (expo-auth-session throws otherwise).
+ */
+export function useGoogleSocialAuth({ mode, accountType }: Options) {
+  const base = useSocialAuth({ mode, accountType });
+  const { finishAuth, setLoading, signInWithGoogleUnavailable } = base;
+  const clientIds = getGoogleOAuthClientIds();
+
+  const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest({
+    iosClientId: clientIds.iosClientId,
+    androidClientId: clientIds.androidClientId,
+    webClientId: clientIds.webClientId,
+    scopes: ['openid', 'profile', 'email'],
+  });
+
+  useEffect(() => {
+    if (!googleResponse || googleResponse.type !== 'success') return;
+    const idToken = googleResponse.authentication?.idToken;
+    if (!idToken) {
+      Alert.alert(
+        'Google sign-in',
+        'No identity token returned. Check OAuth client IDs in mobile/.env',
+      );
+      setLoading(null);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const result = await loginWithGoogle({
+          idToken,
+          mode,
+          accountType: mode === 'signup' ? accountType : undefined,
+        });
+        await finishAuth(result, 'google');
+      } catch (err) {
+        Alert.alert(
+          'Connection error',
+          `${err instanceof Error ? err.message : 'Could not reach server.'}\n\nAPI: ${API_URL}`,
+        );
+      } finally {
+        setLoading(null);
+      }
+    })();
+  }, [googleResponse, mode, accountType, finishAuth, setLoading]);
+
+  const signInWithGoogle = useCallback(async () => {
+    if (!isGoogleOAuthConfigured()) {
+      signInWithGoogleUnavailable();
+      return;
+    }
+    setLoading('google');
+    try {
+      await promptGoogle();
+    } catch {
+      setLoading(null);
+    }
+  }, [promptGoogle, setLoading, signInWithGoogleUnavailable]);
+
+  return {
+    ...base,
+    signInWithGoogle,
+    googleReady: Boolean(googleRequest),
   };
 }

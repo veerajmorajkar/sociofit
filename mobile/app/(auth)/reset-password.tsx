@@ -1,16 +1,14 @@
-import {
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { Text, Alert, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import AuthFormShell from '@/components/auth/AuthFormShell';
+import AuthCtaButton from '@/components/auth/AuthCtaButton';
+import AuthPasswordFields from '@/components/auth/AuthPasswordFields';
+import StaggeredListItem from '@/components/ui/StaggeredListItem';
+import { onVideo } from '@/components/auth/onVideoColors';
 import { resetPassword } from '@/services/auth.service';
-import { radius, fonts } from '@/constants/theme';
+import { validatePasswordConfirm } from '@/utils/authValidation';
+import { fonts } from '@/constants/theme';
 
 export default function ResetPasswordScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
@@ -24,12 +22,9 @@ export default function ResetPasswordScreen() {
       router.replace('/(auth)/forgot-password');
       return;
     }
-    if (!password.trim() || password.length < 8) {
-      Alert.alert('Weak password', 'Min 8 chars, 1 uppercase, 1 number.');
-      return;
-    }
-    if (password !== confirm) {
-      Alert.alert('Mismatch', 'Passwords do not match.');
+    const passwordError = validatePasswordConfirm(password, confirm);
+    if (passwordError) {
+      Alert.alert('Invalid password', passwordError);
       return;
     }
     setLoading(true);
@@ -41,81 +36,54 @@ export default function ResetPasswordScreen() {
       }
       Alert.alert('Password updated', 'You can sign in with your new password.');
       router.replace('/(auth)/login');
-    } catch (err) {
-      Alert.alert('Connection error', err instanceof Error ? err.message : 'Try again');
+    } catch {
+      Alert.alert(
+        'Connection error',
+        'Could not reach the server. Check your internet connection and try again.',
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const inputStyle = s.input;
-
   return (
     <AuthFormShell>
-      <Text style={s.title}>New password</Text>
-      <Text style={s.subtitle}>Choose a strong password for your account.</Text>
+      <StaggeredListItem index={0}>
+        <Text style={s.title}>New password</Text>
+        <Text style={s.subtitle}>Choose a strong password for your account.</Text>
+      </StaggeredListItem>
 
-      <TextInput
-        style={inputStyle}
-        placeholder="New password"
-        placeholderTextColor="rgba(255,255,255,0.45)"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        editable={!loading}
-      />
-      <TextInput
-        style={inputStyle}
-        placeholder="Confirm password"
-        placeholderTextColor="rgba(255,255,255,0.45)"
-        value={confirm}
-        onChangeText={setConfirm}
-        secureTextEntry
-        editable={!loading}
-      />
+      <StaggeredListItem index={1}>
+        <AuthPasswordFields
+          password={password}
+          confirmPassword={confirm}
+          onPasswordChange={setPassword}
+          onConfirmChange={setConfirm}
+          disabled={loading}
+          onSubmit={() => void onSubmit()}
+        />
+      </StaggeredListItem>
 
-      <TouchableOpacity
-        style={[s.btn, loading && s.btnDisabled]}
-        onPress={() => void onSubmit()}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#001A14" />
-        ) : (
-          <Text style={s.btnText}>UPDATE PASSWORD</Text>
-        )}
-      </TouchableOpacity>
+      <StaggeredListItem index={2}>
+        <AuthCtaButton
+          label="Update password"
+          onPress={() => void onSubmit()}
+          loading={loading}
+          style={s.cta}
+        />
+      </StaggeredListItem>
     </AuthFormShell>
   );
 }
 
 const s = StyleSheet.create({
-  title: { fontFamily: fonts.h1, fontSize: 28, color: '#FFFFFF', marginBottom: 8 },
+  // on-video text: always light over dark video
+  title: { fontFamily: fonts.h1, fontSize: 28, color: onVideo.text, marginBottom: 8 },
   subtitle: {
     fontFamily: fonts.body,
     fontSize: 15,
-    color: 'rgba(255,255,255,0.72)',
+    color: onVideo.textSecondary,
     marginBottom: 28,
   },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 15,
-    fontFamily: fonts.body,
-    color: '#FFFFFF',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  btn: {
-    backgroundColor: '#00E5C3',
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  btnDisabled: { opacity: 0.7 },
-  btnText: { fontFamily: fonts.button, fontSize: 14, color: '#001A14', letterSpacing: 1 },
+  cta: { marginTop: 8 },
 });

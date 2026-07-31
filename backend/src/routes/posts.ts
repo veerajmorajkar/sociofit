@@ -21,9 +21,10 @@ export function postRoutes(app: FastifyInstance) {
   app.get('/feed', { preHandler: authenticate }, async (request, reply) => {
     const query = feedQuerySchema.parse(request.query);
     const result = await getFeed(request.user!.userId, query);
-    return sendSuccess(reply, result.posts, 200, {
+    return sendSuccess(reply, result.items, 200, {
       cursor: result.cursor,
       hasMore: result.hasMore,
+      activity: result.activity,
     });
   });
 
@@ -46,8 +47,13 @@ export function postRoutes(app: FastifyInstance) {
   // ── Create Post ───────────────────────────────────────────
   app.post('/', { preHandler: authenticate }, async (request, reply) => {
     const body = createPostSchema.parse(request.body);
-    const post = await createPost(request.user!.userId, body);
-    return sendSuccess(reply, post, 201);
+    try {
+      const post = await createPost(request.user!.userId, body);
+      return sendSuccess(reply, post, 201);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create post';
+      return sendError(reply, message, 400);
+    }
   });
 
   // ── Get Post ──────────────────────────────────────────────

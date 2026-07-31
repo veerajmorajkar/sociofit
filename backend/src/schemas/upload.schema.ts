@@ -10,8 +10,18 @@ export const presignedUrlSchema = z.object({
     'video/mp4',
     'video/quicktime',
   ]),
-  fileSize: z.number().int().positive().max(50 * 1024 * 1024, 'Max file size is 50MB'),
+  fileSize: z
+    .number()
+    .int()
+    .positive()
+    .max(50 * 1024 * 1024, 'Max file size is 50MB'),
   folder: z.enum(['posts', 'avatars', 'covers']).default('posts'),
 });
 
 export type PresignedUrlInput = z.infer<typeof presignedUrlSchema>;
+
+export const confirmUploadSchema = z.object({
+  key: z.string().min(1).max(500),
+});
+
+export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>;

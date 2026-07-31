@@ -1,40 +1,35 @@
-import { Text, StyleSheet } from 'react-native';
-import { colors, fonts } from '@/constants/theme';
+import { Image } from 'expo-image';
+import {
+  MFM_LOGO,
+  MFM_LOGO_ACCESSIBILITY_LABEL,
+  MFM_LOGO_ASPECT,
+  MFM_LOGO_HEADER_WIDTH,
+  MFM_LOGO_HERO_WIDTH,
+} from '@/constants/branding';
+
+interface Props {
+  /** Rendered width; height follows logo aspect ratio. */
+  width?: number;
+}
 
 /**
- * Mumbai Fitness Mafia — header wordmark
- * Outfit, all caps: MUMBAI + MAFIA (purple), FITNESS (teal).
+ * Mumbai Fitness Mafia — official gradient wordmark.
  */
-export default function MFMLogo() {
+export default function MFMLogo({ width = MFM_LOGO_HEADER_WIDTH }: Props) {
+  const height = width / MFM_LOGO_ASPECT;
+
   return (
-    <Text
-      style={s.wordmark}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.82}
-      accessibilityRole="header"
-      accessibilityLabel="Mumbai Fitness Mafia"
-    >
-      <Text style={s.purple}>MUMBAI </Text>
-      <Text style={s.teal}>FITNESS </Text>
-      <Text style={s.purple}>MAFIA</Text>
-    </Text>
+    <Image
+      source={MFM_LOGO}
+      style={{ width, height }}
+      contentFit="contain"
+      accessibilityRole="image"
+      accessibilityLabel={MFM_LOGO_ACCESSIBILITY_LABEL}
+    />
   );
 }
 
-const s = StyleSheet.create({
-  wordmark: {
-    fontFamily: fonts.button,
-    fontSize: 11,
-    lineHeight: 13,
-    letterSpacing: 1.75,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  purple: {
-    color: colors.purpleHero,
-  },
-  teal: {
-    color: colors.tealPrimary,
-  },
-});
+/** Pre-sized for auth welcome / login hero sections. */
+export function MFMLogoHero() {
+  return <MFMLogo width={MFM_LOGO_HERO_WIDTH} />;
+}

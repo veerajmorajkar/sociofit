@@ -1,9 +1,11 @@
 import { db } from '../config/database.js';
-import { posts, postMedia, postTags, likes, reposts, comments, follows } from '../db/schema.js';
+import { posts, postMedia, postTags, likes, reposts, comments } from '../db/schema.js';
 import { eq, and, desc, asc, inArray, sql } from 'drizzle-orm';
 import type { CreatePostInput, FeedQueryInput, CommentInput } from '../schemas/post.schema.js';
 import { notifyUser } from './notification.service.js';
 import { users } from '../db/schema.js';
+import { getModerationContext, isPostHidden, isUserHidden } from './moderation.service.js';
+import { assertOptionalUserMediaUrl, assertUserMediaUrl } from '../utils/media-url.js';
 
 export type TaggedUserSummary = {
   id: string;
@@ -60,7 +62,7 @@ async function getTaggedUsersByPostIds(
   return map;
 }
 
-async function enrichPostsWithTags<T extends { id: string }>(
+export async function enrichPostsWithTags<T extends { id: string }>(
   items: T[],
 ): Promise<Array<T & { taggedUsers: TaggedUserSummary[] }>> {
   const tagMap = await getTaggedUsersByPostIds(items.map((p) => p.id));
@@ -114,6 +116,10 @@ export async function createPost(authorId: string, input: CreatePostInput) {
 
   // Insert media if provided
   if (postInput.mediaUrls && postInput.mediaUrls.length > 0) {
+    for (const media of postInput.mediaUrls) {
+      await assertUserMediaUrl(media.url, authorId, 'posts');
+      await assertOptionalUserMediaUrl(media.thumbnailUrl, authorId, 'posts');
+    }
     await db.insert(postMedia).values(
       postInput.mediaUrls.map((m, i) => ({
         postId: post.id,
@@ -154,6 +160,9 @@ export async function getPostById(postId: string, requestingUserId: string) {
 
   if (!post) return null;
 
+  const moderation = await getModerationContext(requestingUserId);
+  if (isPostHidden(moderation, post.id, post.author.id)) return null;
+
   const [liked, reposted] = await Promise.all([
     db
       .select({ id: likes.id })
@@ -176,20 +185,13 @@ export async function getPostById(postId: string, requestingUserId: string) {
   };
 }
 
-/** Social graph: people you follow, people who follow you, and yourself */
-async function getNetworkUserIds(userId: string): Promise<Set<string>> {
-  const [followingRows, followerRows] = await Promise.all([
-    db.select({ id: follows.followingId }).from(follows).where(eq(follows.followerId, userId)),
-    db.select({ id: follows.followerId }).from(follows).where(eq(follows.followingId, userId)),
-  ]);
-
-  const network = new Set<string>([userId]);
-  for (const row of followingRows) network.add(row.id);
-  for (const row of followerRows) network.add(row.id);
-  return network;
+// ── Get Feed (delegates to feed algorithm) ───────────────────
+export async function getFeed(userId: string, input: FeedQueryInput) {
+  const { buildFeed } = await import('./feed.service.js');
+  return buildFeed(userId, input);
 }
 
-async function enrichPostsWithEngagement<T extends { id: string }>(
+export async function enrichPostsWithEngagement<T extends { id: string }>(
   items: T[],
   viewerId: string,
 ): Promise<Array<T & { isLiked: boolean; isReposted: boolean }>> {
@@ -217,101 +219,6 @@ async function enrichPostsWithEngagement<T extends { id: string }>(
   }));
 }
 
-/**
- * Blended home feed: network posts (following + followers) ranked together with
- * high-reach posts from others (engagement + recency). Paid boost reserved for later.
- */
-function scorePostForFeed(
-  post: {
-    authorId: string;
-    likeCount: number | null;
-    commentCount: number | null;
-    createdAt: Date;
-  },
-  network: Set<string>,
-  nowMs: number,
-): number {
-  const inNetwork = network.has(post.authorId);
-  const likes = post.likeCount ?? 0;
-  const comments = post.commentCount ?? 0;
-  const ageHours = (nowMs - post.createdAt.getTime()) / (1000 * 60 * 60);
-  const recencyBoost = Math.max(0, 72 - ageHours) * 3;
-  const engagementScore = likes * 2 + comments * 5;
-  const networkBoost = inNetwork ? 800 : 0;
-
-  return networkBoost + engagementScore + recencyBoost;
-}
-
-// ── Get Feed ─────────────────────────────────────────────────
-export async function getFeed(userId: string, input: FeedQueryInput) {
-  const { cursor, limit } = input;
-  const network = await getNetworkUserIds(userId);
-  const nowMs = Date.now();
-
-  // Score a recent candidate pool, then paginate in memory (fine for beta scale)
-  const candidates = await db.query.posts.findMany({
-    where: eq(posts.isActive, true),
-    with: {
-      author: {
-        columns: {
-          id: true,
-          displayName: true,
-          username: true,
-          avatarUrl: true,
-          accountType: true,
-          isVerified: true,
-        },
-      },
-      media: {
-        orderBy: [postMedia.sortOrder],
-      },
-    },
-    orderBy: [desc(posts.createdAt)],
-    limit: 200,
-  });
-
-  if (candidates.length === 0) {
-    return { posts: [], cursor: null, hasMore: false };
-  }
-
-  const ranked = candidates
-    .map((post) => ({
-      post,
-      score: scorePostForFeed(post, network, nowMs),
-    }))
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return b.post.createdAt.getTime() - a.post.createdAt.getTime();
-    });
-
-  let startIndex = 0;
-  if (cursor) {
-    const cursorIndex = ranked.findIndex((r) => r.post.id === cursor);
-    if (cursorIndex >= 0) startIndex = cursorIndex + 1;
-  }
-
-  const page = ranked.slice(startIndex, startIndex + limit + 1);
-  const hasMore = page.length > limit;
-  const items = hasMore ? page.slice(0, limit) : page;
-  const postIds = items.map((r) => r.post.id);
-
-  if (postIds.length === 0) {
-    return { posts: [], cursor: null, hasMore: false };
-  }
-
-  const withEngagement = await enrichPostsWithEngagement(
-    items.map((r) => r.post),
-    userId,
-  );
-  const enriched = await enrichPostsWithTags(withEngagement);
-
-  return {
-    posts: enriched,
-    cursor: hasMore ? (postIds[postIds.length - 1] ?? null) : null,
-    hasMore,
-  };
-}
-
 // ── Posts by author (profile grid) ───────────────────────────
 export async function getPostsByAuthor(
   authorId: string,
@@ -319,6 +226,11 @@ export async function getPostsByAuthor(
   cursor?: string,
   limit = 20,
 ) {
+  const moderation = await getModerationContext(viewerId);
+  if (isUserHidden(moderation, authorId)) {
+    return { posts: [], cursor: null, hasMore: false };
+  }
+
   const authorColumns = {
     id: true,
     displayName: true,
@@ -375,7 +287,9 @@ export async function getPostsByAuthor(
         post: r.post,
         repostMeta: { repostId: r.id, repostedAt: r.createdAt },
       })),
-  ].sort((a, b) => b.sortAt - a.sortAt);
+  ]
+    .sort((a, b) => b.sortAt - a.sortAt)
+    .filter((entry) => !isPostHidden(moderation, entry.post.id, entry.post.authorId));
 
   let startIndex = 0;
   if (cursor) {
@@ -418,28 +332,39 @@ export async function getPostsByAuthor(
 
 // ── Like / Unlike ────────────────────────────────────────────
 export async function likePost(userId: string, postId: string) {
-  // Check post exists
-  const [post] = await db
-    .select({ id: posts.id, authorId: posts.authorId, likeCount: posts.likeCount })
-    .from(posts)
-    .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
-    .limit(1);
+  // Insert like row + atomic counter increment as a single all-or-nothing unit —
+  // never a read-modify-write in application code, and never a partial write.
+  const result = await db.transaction(async (tx) => {
+    const [post] = await tx
+      .select({ id: posts.id, authorId: posts.authorId, likeCount: posts.likeCount })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
+      .limit(1);
 
-  if (!post) throw new Error('Post not found');
+    if (!post) throw new Error('Post not found');
 
-  // Check already liked
-  const [existing] = await db
-    .select({ id: likes.id })
-    .from(likes)
-    .where(and(eq(likes.userId, userId), eq(likes.postId, postId)))
-    .limit(1);
+    const [existing] = await tx
+      .select({ id: likes.id })
+      .from(likes)
+      .where(and(eq(likes.userId, userId), eq(likes.postId, postId)))
+      .limit(1);
 
-  if (existing) return { liked: true, likeCount: post.likeCount ?? 0 };
+    if (existing) {
+      return { alreadyLiked: true, authorId: post.authorId, likeCount: post.likeCount ?? 0 };
+    }
 
-  // Insert like + increment counter atomically
-  await db.insert(likes).values({ userId, postId });
+    await tx.insert(likes).values({ userId, postId });
 
-  if (post.authorId !== userId) {
+    const [updated] = await tx
+      .update(posts)
+      .set({ likeCount: sql`${posts.likeCount} + 1` })
+      .where(eq(posts.id, postId))
+      .returning({ likeCount: posts.likeCount });
+
+    return { alreadyLiked: false, authorId: post.authorId, likeCount: updated?.likeCount ?? 0 };
+  });
+
+  if (!result.alreadyLiked && result.authorId !== userId) {
     const [liker] = await db
       .select({ displayName: users.displayName })
       .from(users)
@@ -447,64 +372,82 @@ export async function likePost(userId: string, postId: string) {
       .limit(1);
     const postImageUrl = await getPostThumbnailForNotification(postId);
     notifyUser({
-      userId: post.authorId,
+      userId: result.authorId,
       type: 'like',
       title: `${liker?.displayName ?? 'Someone'} liked your post`,
       data: { postId, postImageUrl: postImageUrl ?? undefined },
     });
   }
-  const [updated] = await db
-    .update(posts)
-    .set({ likeCount: sql`${posts.likeCount} + 1` })
-    .where(eq(posts.id, postId))
-    .returning({ likeCount: posts.likeCount });
 
-  return { liked: true, likeCount: updated?.likeCount ?? 0 };
+  return { liked: true, likeCount: result.likeCount };
 }
 
 export async function unlikePost(userId: string, postId: string) {
-  const [post] = await db
-    .select({ id: posts.id, likeCount: posts.likeCount })
-    .from(posts)
-    .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
-    .limit(1);
+  return db.transaction(async (tx) => {
+    const [post] = await tx
+      .select({ id: posts.id, likeCount: posts.likeCount })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
+      .limit(1);
 
-  if (!post) throw new Error('Post not found');
+    if (!post) throw new Error('Post not found');
 
-  await db.delete(likes).where(and(eq(likes.userId, userId), eq(likes.postId, postId)));
+    const deleted = await tx
+      .delete(likes)
+      .where(and(eq(likes.userId, userId), eq(likes.postId, postId)))
+      .returning({ id: likes.id });
 
-  const [updated] = await db
-    .update(posts)
-    .set({ likeCount: sql`GREATEST(${posts.likeCount} - 1, 0)` })
-    .where(eq(posts.id, postId))
-    .returning({ likeCount: posts.likeCount });
+    if (deleted.length === 0) {
+      return { liked: false, likeCount: post.likeCount ?? 0 };
+    }
 
-  return { liked: false, likeCount: updated?.likeCount ?? 0 };
+    const [updated] = await tx
+      .update(posts)
+      .set({ likeCount: sql`GREATEST(${posts.likeCount} - 1, 0)` })
+      .where(eq(posts.id, postId))
+      .returning({ likeCount: posts.likeCount });
+
+    return { liked: false, likeCount: updated?.likeCount ?? 0 };
+  });
 }
 
 // ── Repost / Unrepost ────────────────────────────────────────
 export async function repostPost(userId: string, postId: string) {
-  const [post] = await db
-    .select({ id: posts.id, authorId: posts.authorId, shareCount: posts.shareCount })
-    .from(posts)
-    .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
-    .limit(1);
+  const result = await db.transaction(async (tx) => {
+    const [post] = await tx
+      .select({ id: posts.id, authorId: posts.authorId, shareCount: posts.shareCount })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
+      .limit(1);
 
-  if (!post) throw new Error('Post not found');
+    if (!post) throw new Error('Post not found');
 
-  const [existing] = await db
-    .select({ id: reposts.id })
-    .from(reposts)
-    .where(and(eq(reposts.userId, userId), eq(reposts.postId, postId)))
-    .limit(1);
+    const [existing] = await tx
+      .select({ id: reposts.id })
+      .from(reposts)
+      .where(and(eq(reposts.userId, userId), eq(reposts.postId, postId)))
+      .limit(1);
 
-  if (existing) {
-    return { reposted: true, repostCount: post.shareCount ?? 0 };
-  }
+    if (existing) {
+      return { alreadyReposted: true, authorId: post.authorId, repostCount: post.shareCount ?? 0 };
+    }
 
-  await db.insert(reposts).values({ userId, postId });
+    await tx.insert(reposts).values({ userId, postId });
 
-  if (post.authorId !== userId) {
+    const [updated] = await tx
+      .update(posts)
+      .set({ shareCount: sql`${posts.shareCount} + 1` })
+      .where(eq(posts.id, postId))
+      .returning({ shareCount: posts.shareCount });
+
+    return {
+      alreadyReposted: false,
+      authorId: post.authorId,
+      repostCount: updated?.shareCount ?? 0,
+    };
+  });
+
+  if (!result.alreadyReposted && result.authorId !== userId) {
     const [reposter] = await db
       .select({ displayName: users.displayName })
       .from(users)
@@ -512,67 +455,75 @@ export async function repostPost(userId: string, postId: string) {
       .limit(1);
     const postImageUrl = await getPostThumbnailForNotification(postId);
     notifyUser({
-      userId: post.authorId,
+      userId: result.authorId,
       type: 'repost',
       title: `${reposter?.displayName ?? 'Someone'} reposted your post`,
       data: { postId, postImageUrl: postImageUrl ?? undefined },
     });
   }
 
-  const [updated] = await db
-    .update(posts)
-    .set({ shareCount: sql`${posts.shareCount} + 1` })
-    .where(eq(posts.id, postId))
-    .returning({ shareCount: posts.shareCount });
-
-  return { reposted: true, repostCount: updated?.shareCount ?? 0 };
+  return { reposted: true, repostCount: result.repostCount };
 }
 
 export async function unrepostPost(userId: string, postId: string) {
-  const [post] = await db
-    .select({ id: posts.id, shareCount: posts.shareCount })
-    .from(posts)
-    .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
-    .limit(1);
+  return db.transaction(async (tx) => {
+    const [post] = await tx
+      .select({ id: posts.id, shareCount: posts.shareCount })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
+      .limit(1);
 
-  if (!post) throw new Error('Post not found');
+    if (!post) throw new Error('Post not found');
 
-  await db.delete(reposts).where(and(eq(reposts.userId, userId), eq(reposts.postId, postId)));
+    const deleted = await tx
+      .delete(reposts)
+      .where(and(eq(reposts.userId, userId), eq(reposts.postId, postId)))
+      .returning({ id: reposts.id });
 
-  const [updated] = await db
-    .update(posts)
-    .set({ shareCount: sql`GREATEST(${posts.shareCount} - 1, 0)` })
-    .where(eq(posts.id, postId))
-    .returning({ shareCount: posts.shareCount });
+    if (deleted.length === 0) {
+      return { reposted: false, repostCount: post.shareCount ?? 0 };
+    }
 
-  return { reposted: false, repostCount: updated?.shareCount ?? 0 };
+    const [updated] = await tx
+      .update(posts)
+      .set({ shareCount: sql`GREATEST(${posts.shareCount} - 1, 0)` })
+      .where(eq(posts.id, postId))
+      .returning({ shareCount: posts.shareCount });
+
+    return { reposted: false, repostCount: updated?.shareCount ?? 0 };
+  });
 }
 
 // ── Comments ─────────────────────────────────────────────────
 export async function addComment(userId: string, postId: string, input: CommentInput) {
-  const [post] = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
-    .limit(1);
+  // Insert comment + increment counter as a single atomic unit — if either
+  // fails, both roll back, so the counter can never drift from a partial write.
+  const comment = await db.transaction(async (tx) => {
+    const [post] = await tx
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.isActive, true)))
+      .limit(1);
 
-  if (!post) throw new Error('Post not found');
+    if (!post) throw new Error('Post not found');
 
-  const [comment] = await db
-    .insert(comments)
-    .values({
-      postId,
-      authorId: userId,
-      parentId: input.parentId,
-      content: input.content,
-    })
-    .returning();
+    const [inserted] = await tx
+      .insert(comments)
+      .values({
+        postId,
+        authorId: userId,
+        parentId: input.parentId,
+        content: input.content,
+      })
+      .returning();
 
-  // Increment comment count
-  await db
-    .update(posts)
-    .set({ commentCount: sql`${posts.commentCount} + 1` })
-    .where(eq(posts.id, postId));
+    await tx
+      .update(posts)
+      .set({ commentCount: sql`${posts.commentCount} + 1` })
+      .where(eq(posts.id, postId));
+
+    return inserted;
+  });
 
   // Return comment with author
   const full = await db.query.comments.findFirst({

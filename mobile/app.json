@@ -5,14 +5,17 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "fitsocial",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F4F2FF",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/images/Mumbai_fitness_mafia_logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0E0E14"
+      "backgroundColor": "#F4F2FF"
     },
     "ios": {
       "supportsTablet": false,
+      "backgroundColor": "#F4F2FF",
       "bundleIdentifier": "app.fitsocial.mobile",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Mumbai Fitness Mafia uses your location to show nearby events on the map.",
@@ -23,8 +26,9 @@
       }
     },
     "android": {
+      "backgroundColor": "#F4F2FF",
       "adaptiveIcon": {
-        "backgroundColor": "#0E0E14"
+        "backgroundColor": "#F4F2FF"
       },
       "package": "app.fitsocial.mobile",
       "permissions": [
@@ -39,6 +43,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F4F2FF"
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       [

@@ -23,7 +23,8 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import CommentComposer from '@/components/feed/CommentComposer';
 import { usePostComments, useAddComment } from '@/hooks/usePosts';
 import { useAuthStore } from '@/stores/authStore';
-import { colors, fonts, radius, shadows } from '@/constants/theme';
+import { fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { timeAgo } from '@/utils/formatDate';
 import type { Comment } from '@/types/post';
 
@@ -32,7 +33,6 @@ const SHEET_HEIGHT = Math.round(SCREEN_H * 0.62);
 const MIN_SHEET_H = 220;
 const NOTCH_GAP = 12;
 const DISMISS_DRAG_PX = 72;
-/** Snappy keyboard sync — slightly faster than system default */
 const KEYBOARD_EASING = Easing.bezier(0.33, 0.99, 0.52, 1);
 const DISMISS_EASING = Easing.out(Easing.cubic);
 
@@ -44,6 +44,7 @@ interface Props {
 
 export default function CommentsBottomSheet({ visible, postId, onClose }: Props) {
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const sheetY = useRef(new Animated.Value(0)).current;
   const dragY = useRef(new Animated.Value(0)).current;
@@ -120,15 +121,9 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
     isFetchingNextPage,
     refetch,
   } = usePostComments(visible ? postId : '');
-
   const { mutate: submitComment, isPending: sending } = useAddComment(postId);
-
   const comments = pages?.pages.flatMap((p) => p.data) ?? [];
 
-  /*
-   * Fit sheet between notch gap and keyboard top — shrink height + lift bottom
-   * so the header never crosses the safe area.
-   */
   useEffect(() => {
     if (!visible) {
       sheetY.setValue(0);
@@ -138,12 +133,10 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
       currentHeightRef.current = SHEET_HEIGHT;
       return;
     }
-
     const duration = (e?: KeyboardEvent) => {
       const sys = e?.duration ?? 250;
       return Platform.OS === 'ios' ? Math.round(sys * 0.72) : 180;
     };
-
     const animateTo = (y: number, height: number, e?: KeyboardEvent) => {
       sheetY.stopAnimation();
       sheetHeight.stopAnimation();
@@ -168,26 +161,20 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
         }),
       ]).start();
     };
-
     const onShow = (e: KeyboardEvent) => {
       const keyboardTop = e.endCoordinates.screenY;
       const minSheetTop = insets.top + NOTCH_GAP;
       const available = keyboardTop - minSheetTop;
       const targetHeight = Math.max(MIN_SHEET_H, Math.min(SHEET_HEIGHT, available));
-      const targetY = keyboardTop - SCREEN_H;
-      animateTo(targetY, targetHeight, e);
+      animateTo(keyboardTop - SCREEN_H, targetHeight, e);
     };
-
     const onHide = (e: KeyboardEvent) => {
       animateTo(0, SHEET_HEIGHT, e);
     };
-
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
     const subShow = Keyboard.addListener(showEvt, onShow);
     const subHide = Keyboard.addListener(hideEvt, onHide);
-
     return () => {
       subShow.remove();
       subHide.remove();
@@ -214,15 +201,29 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
   }, [text, sending, submitComment]);
 
   const renderComment = ({ item }: { item: Comment }) => (
-    <View style={s.commentCard}>
-      <UserAvatar name={item.author.displayName} avatarUrl={item.author.avatarUrl} size={34} ring />
-      <View style={s.commentBody}>
-        <View style={s.commentHeader}>
-          <Text style={s.commentAuthor}>{item.author.displayName}</Text>
-          <Text style={s.commentTime}>{timeAgo(item.createdAt)}</Text>
+    <View
+      style={[
+        s.commentBubble,
+        { backgroundColor: theme.surface2, borderColor: theme.surface3, ...theme.shadows.sm },
+      ]}
+    >
+      <View style={s.commentTopRow}>
+        <View style={s.commentAvatarSlot}>
+          <UserAvatar
+            name={item.author.displayName}
+            avatarUrl={item.author.avatarUrl}
+            size={30}
+            ring
+          />
         </View>
-        <Text style={s.commentText}>{item.content}</Text>
+        <View style={s.commentHeader}>
+          <Text style={[s.commentAuthor, { color: theme.textPrimary }]} numberOfLines={1}>
+            {item.author.displayName}
+          </Text>
+          <Text style={[s.commentTime, { color: theme.textMuted }]}>{timeAgo(item.createdAt)}</Text>
+        </View>
       </View>
+      <Text style={[s.commentText, { color: theme.textSecondary }]}>{item.content}</Text>
     </View>
   );
 
@@ -239,30 +240,39 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
           <View style={s.backdrop} />
         </TouchableWithoutFeedback>
 
-        {/* Height (JS driver) and translateY (native driver) must be on separate nodes */}
-        <Animated.View style={[s.sheetWrap, { height: sheetHeight }]}>
+        <Animated.View style={[s.sheetWrap, { height: sheetHeight, ...theme.shadows.lg }]}>
           <Animated.View
             style={[s.sheetLift, { transform: [{ translateY: Animated.add(sheetY, dragY) }] }]}
           >
-            <View style={s.sheet}>
+            <View
+              style={[s.sheet, { backgroundColor: theme.surface1, borderColor: theme.surface3 }]}
+            >
               <View style={s.sheetRim} pointerEvents="none" />
 
               <View style={s.dragZone} {...panResponder.panHandlers}>
-                <View style={s.handle} />
+                <View style={[s.handle, { backgroundColor: theme.surface3 }]} />
                 <View style={s.header}>
-                  <Text style={s.headerTitle}>Comments</Text>
+                  <Text style={[s.headerTitle, { color: theme.textPrimary }]}>Comments</Text>
                 </View>
               </View>
 
               {isLoading ? (
                 <View style={s.centered}>
-                  <ActivityIndicator color={colors.tealPrimary} />
+                  <ActivityIndicator color={theme.tealPrimary} />
                 </View>
               ) : isError ? (
                 <View style={s.centered}>
-                  <Text style={s.emptyText}>Could not load comments</Text>
-                  <TouchableOpacity onPress={() => void refetch()} style={s.retryBtn}>
-                    <Text style={s.retryText}>Retry</Text>
+                  <Text style={[s.emptyText, { color: theme.textMuted }]}>
+                    Could not load comments
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => void refetch()}
+                    style={[
+                      s.retryBtn,
+                      { backgroundColor: theme.surface2, borderColor: theme.surface3 },
+                    ]}
+                  >
+                    <Text style={[s.retryText, { color: theme.tealPrimary }]}>Retry</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -275,7 +285,9 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode="on-drag"
                   ListEmptyComponent={
-                    <Text style={s.emptyText}>No comments yet. Start the conversation.</Text>
+                    <Text style={[s.emptyText, { color: theme.textMuted }]}>
+                      No comments yet. Start the conversation.
+                    </Text>
                   }
                   ListFooterComponent={
                     hasNextPage ? (
@@ -285,9 +297,11 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
                         disabled={isFetchingNextPage}
                       >
                         {isFetchingNextPage ? (
-                          <ActivityIndicator size="small" color={colors.tealPrimary} />
+                          <ActivityIndicator size="small" color={theme.tealPrimary} />
                         ) : (
-                          <Text style={s.loadMoreText}>Load older comments</Text>
+                          <Text style={[s.loadMoreText, { color: theme.tealPrimary }]}>
+                            Load older comments
+                          </Text>
                         )}
                       </TouchableOpacity>
                     ) : null
@@ -295,7 +309,16 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
                 />
               )}
 
-              <View style={s.composerSafe}>
+              <View
+                style={[
+                  s.composerSafe,
+                  {
+                    paddingBottom: Math.max(10, insets.bottom - 12),
+                    borderTopColor: theme.surface3,
+                    backgroundColor: theme.surface1,
+                  },
+                ]}
+              >
                 <CommentComposer
                   inputRef={inputRef}
                   value={text}
@@ -315,29 +338,15 @@ export default function CommentsBottomSheet({ visible, postId, onClose }: Props)
 }
 
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  sheetWrap: {
-    width: '100%',
-    ...shadows.lg,
-  },
-  sheetLift: {
-    flex: 1,
-    width: '100%',
-  },
+  root: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheetWrap: { width: '100%' },
+  sheetLift: { flex: 1, width: '100%' },
   sheet: {
     flex: 1,
-    backgroundColor: colors.surface1,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderTopWidth: 1,
-    borderColor: colors.surface3,
     overflow: 'hidden',
   },
   sheetRim: {
@@ -349,106 +358,43 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.035)',
     zIndex: 1,
   },
-  dragZone: {
-    alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 2,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.surface3,
-    alignSelf: 'center',
-    marginBottom: 6,
-  },
+  dragZone: { alignItems: 'center', paddingTop: 8, paddingBottom: 2 },
+  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 6 },
   header: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
     paddingVertical: 8,
   },
-  headerTitle: {
-    fontFamily: fonts.h2,
-    fontSize: 16,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
+  headerTitle: { fontFamily: fonts.h2, fontSize: 16, textAlign: 'center' },
   list: { flex: 1 },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    gap: 12,
-  },
+  listContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, gap: 10 },
   listEmpty: { flexGrow: 1, justifyContent: 'center' },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  emptyText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  emptyText: { fontFamily: fonts.body, fontSize: 14, textAlign: 'center' },
   retryBtn: {
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
     borderWidth: 1,
-    borderColor: colors.surface3,
   },
-  retryText: { fontFamily: fonts.bodyStrong, fontSize: 13, color: colors.tealPrimary },
-  /* Received-bubble style — surface2 nested on surface1 sheet (§7.8) */
-  commentCard: {
-    flexDirection: 'row',
-    gap: 10,
-    padding: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.surface3,
-    ...shadows.sm,
-  },
-  commentBody: { flex: 1 },
+  retryText: { fontFamily: fonts.bodyStrong, fontSize: 13 },
+  commentBubble: { padding: 12, borderRadius: radius.lg, borderWidth: 1 },
+  commentTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  commentAvatarSlot: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   commentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 3,
+    justifyContent: 'space-between',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
   },
-  commentAuthor: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 13,
-    color: colors.textPrimary,
-  },
-  commentTime: {
-    fontFamily: fonts.caption,
-    fontSize: 11,
-    color: colors.textMuted,
-  },
-  commentText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
+  commentAuthor: { fontFamily: fonts.bodyStrong, fontSize: 13, flex: 1, minWidth: 0 },
+  commentTime: { fontFamily: fonts.caption, fontSize: 11 },
+  commentText: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21 },
   loadMore: { alignItems: 'center', paddingVertical: 12 },
-  loadMoreText: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.tealPrimary,
-    letterSpacing: 0.5,
-  },
-  composerSafe: {
-    backgroundColor: colors.surface1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 10,
-  },
+  loadMoreText: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 0.5 },
+  composerSafe: { paddingHorizontal: 16, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth },
 });

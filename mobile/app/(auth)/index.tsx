@@ -7,6 +7,7 @@ import AuthHeroBrand from '@/components/auth/AuthHeroBrand';
 import AuthLegalFooter from '@/components/auth/AuthLegalFooter';
 import AuthPillButton from '@/components/auth/AuthPillButton';
 import { fonts } from '@/constants/theme';
+import { onVideo } from '@/components/auth/onVideoColors';
 
 export default function AuthWelcomeScreen() {
   return (
@@ -51,7 +52,9 @@ const s = StyleSheet.create({
   loginLink: {
     fontFamily: fonts.h3,
     fontSize: 16,
-    color: '#FFFFFF',
-    paddingVertical: 8,
+    // on-video text: always light over dark video
+    color: onVideo.text,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
 });

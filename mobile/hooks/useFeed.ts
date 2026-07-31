@@ -2,9 +2,14 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { getFeed, likePost, unlikePost, repostPost, unrepostPost } from '@/services/posts.service';
 import { useAuthStore } from '@/stores/authStore';
 import type { Post } from '@/types/post';
+import type { FeedItem } from '@/types/feed';
+import { isFeedPostItem } from '@/types/feed';
 
 type FeedInfiniteData = {
-  pages: { data: Post[]; meta: { cursor: string | null; hasMore: boolean } }[];
+  pages: {
+    data: FeedItem[];
+    meta: { cursor: string | null; hasMore: boolean };
+  }[];
   pageParams: unknown[];
 };
 
@@ -30,7 +35,10 @@ function patchFeedPosts(
       ...old,
       pages: old.pages.map((page) => ({
         ...page,
-        data: (page.data ?? []).map((post) => (post.id === postId ? patch(post) : post)),
+        data: (page.data ?? []).map((item) => {
+          if (!isFeedPostItem(item) || item.post.id !== postId) return item;
+          return { ...item, post: patch(item.post) };
+        }),
       })),
     };
   });

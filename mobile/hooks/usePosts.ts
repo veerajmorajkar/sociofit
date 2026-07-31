@@ -8,6 +8,8 @@ import {
 } from '@/services/posts.service';
 import { useAuthStore } from '@/stores/authStore';
 import type { Post } from '@/types/post';
+import type { FeedItem } from '@/types/feed';
+import { isFeedPostItem } from '@/types/feed';
 
 export function useUserPosts(userId: string) {
   return useInfiniteQuery({
@@ -69,18 +71,28 @@ export function useAddComment(postId: string) {
       void queryClient.invalidateQueries({ queryKey: ['post', postId, 'comments'] });
       void queryClient.invalidateQueries({ queryKey: ['post', postId] });
 
-      queryClient.setQueriesData<{ pages: { data: Post[] }[] }>({ queryKey: ['feed'] }, (old) => {
-        if (!old?.pages) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            data: (page.data ?? []).map((post) =>
-              post.id === postId ? { ...post, commentCount: (post.commentCount ?? 0) + 1 } : post,
-            ),
-          })),
-        };
-      });
+      queryClient.setQueriesData<{ pages: { data: FeedItem[] }[] }>(
+        { queryKey: ['feed'] },
+        (old) => {
+          if (!old?.pages) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              data: (page.data ?? []).map((item) => {
+                if (!isFeedPostItem(item) || item.post.id !== postId) return item;
+                return {
+                  ...item,
+                  post: {
+                    ...item.post,
+                    commentCount: (item.post.commentCount ?? 0) + 1,
+                  },
+                };
+              }),
+            })),
+          };
+        },
+      );
 
       queryClient.setQueryData<Post>(['post', postId], (old) =>
         old ? { ...old, commentCount: (old.commentCount ?? 0) + 1 } : old,

@@ -4,7 +4,8 @@ import { Bell, Plus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNotifications } from '@/hooks/useNotifications';
-import { colors, fonts } from '@/constants/theme';
+import { fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 import MFMLogo from './MFMLogo';
 
 interface AppHeaderProps {
@@ -12,70 +13,94 @@ interface AppHeaderProps {
 }
 
 const HIT = 38;
+/** Bar + 1px divider — add safe-area top inset for list offset. */
+export const APP_HEADER_BODY_HEIGHT = 47;
 
 export default function AppHeader({ showActions = true }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { theme, pageBg } = useTheme();
   const { data: notifications } = useNotifications();
 
   const notificationUnread = notifications?.filter((n) => !n.isRead).length ?? 0;
 
   return (
-    <View>
+    <View style={[s.shell, { paddingTop: insets.top, backgroundColor: pageBg }]}>
       <LinearGradient
-        colors={['#08080C', '#0B0B12', colors.bgPrimary, colors.bgPrimary]}
-        locations={[0, 0.45, 0.88, 1]}
-        style={{ paddingTop: insets.top }}
-      >
-        <View style={styles.bar}>
-          <View style={styles.sideSlot}>
-            {showActions ? (
-              <TouchableOpacity
-                onPress={() => router.push('/post/create' as never)}
-                style={styles.iconHit}
-                activeOpacity={0.6}
-                hitSlop={12}
-                accessibilityLabel="Create post"
-                accessibilityRole="button"
-              >
-                <Plus size={20} strokeWidth={1.75} color={colors.textPrimary} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <View style={styles.centerSlot}>
-            <MFMLogo />
-          </View>
-
-          <View style={[styles.sideSlot, styles.sideSlotRight]}>
-            {showActions ? (
-              <TouchableOpacity
-                onPress={() => router.push('/notifications')}
-                style={styles.iconHit}
-                activeOpacity={0.6}
-                hitSlop={12}
-                accessibilityLabel="Notifications"
-                accessibilityRole="button"
-              >
-                <Bell size={20} strokeWidth={1.75} color={colors.textPrimary} />
-                {notificationUnread > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {notificationUnread > 9 ? '9+' : notificationUnread}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ) : null}
-          </View>
+        pointerEvents="none"
+        colors={[`rgba(${hexToRgb(pageBg)},0)`, pageBg, pageBg]}
+        locations={[0, 0.4, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={s.bar}>
+        <View style={s.sideSlot}>
+          {showActions ? (
+            <TouchableOpacity
+              onPress={() => router.push('/post/create' as never)}
+              style={s.iconHit}
+              activeOpacity={0.6}
+              hitSlop={12}
+              accessibilityLabel="Create post"
+              accessibilityRole="button"
+            >
+              <Plus size={20} strokeWidth={1.75} color={theme.textMuted} />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        <View style={styles.fadeTail} />
-      </LinearGradient>
+        <View style={s.centerSlot}>
+          <MFMLogo />
+        </View>
+
+        <View style={[s.sideSlot, s.sideSlotRight]}>
+          {showActions ? (
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              style={s.iconHit}
+              activeOpacity={0.6}
+              hitSlop={12}
+              accessibilityLabel="Notifications"
+              accessibilityRole="button"
+            >
+              <Bell size={20} strokeWidth={1.75} color={theme.textMuted} />
+              {notificationUnread > 0 && (
+                <View style={[s.badge, { backgroundColor: theme.tealPrimary }]}>
+                  <Text style={[s.badgeText, { color: theme.onTeal }]}>
+                    {notificationUnread > 9 ? '9+' : notificationUnread}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={s.headerDivider}>
+        <LinearGradient
+          colors={['transparent', `rgba(${hexToRgb(theme.purpleSoft)},0.22)`, 'transparent']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={s.headerDividerLine}
+        />
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+/** Convert a #RRGGBB hex to "R,G,B" for rgba() strings. Falls back to 0,0,0. */
+function hexToRgb(hex: string): string {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return '0,0,0';
+  return `${parseInt(m[1]!, 16)},${parseInt(m[2]!, 16)},${parseInt(m[3]!, 16)}`;
+}
+
+const s = StyleSheet.create({
+  shell: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -98,8 +123,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingHorizontal: 8,
   },
-  fadeTail: {
-    height: 5,
+  headerDivider: {
+    paddingHorizontal: 28,
+  },
+  headerDividerLine: {
+    height: 1,
+    borderRadius: radius.full,
   },
   iconHit: {
     width: HIT,
@@ -115,7 +144,6 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: colors.error,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -123,6 +151,5 @@ const styles = StyleSheet.create({
   badgeText: {
     fontFamily: fonts.caption,
     fontSize: 9,
-    color: colors.textPrimary,
   },
 });

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
-import { presignedUrlSchema } from '../schemas/upload.schema.js';
-import { generatePresignedUrl } from '../services/upload.service.js';
+import { presignedUrlSchema, confirmUploadSchema } from '../schemas/upload.schema.js';
+import { generatePresignedUrl, confirmUpload } from '../services/upload.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 export function uploadRoutes(app: FastifyInstance) {
@@ -16,6 +16,19 @@ export function uploadRoutes(app: FastifyInstance) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate upload URL';
       return sendError(reply, message, 400);
+    }
+  });
+
+  // Confirm a direct-to-R2 upload completed. Mobile should call this right
+  // after the PUT succeeds; harmless (idempotent) if called more than once.
+  app.post('/confirm', { preHandler: authenticate }, async (request, reply) => {
+    const body = confirmUploadSchema.parse(request.body);
+    try {
+      await confirmUpload(request.user!.userId, body.key);
+      return sendSuccess(reply, { confirmed: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to confirm upload';
+      return sendError(reply, message, 404);
     }
   });
 }

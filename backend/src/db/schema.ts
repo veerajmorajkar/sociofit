@@ -47,6 +47,9 @@ export const users = pgTable(
     expoPushToken: varchar('expo_push_token', { length: 255 }),
     isVerified: boolean('is_verified').default(false),
     isActive: boolean('is_active').default(true),
+    /** Bumped on password reset/change, email/phone change, or "log out all devices".
+     *  Embedded in access tokens so old tokens die immediately, not just at natural expiry. */
+    tokenVersion: integer('token_version').notNull().default(0),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -73,7 +76,32 @@ export const passwordResetTokens = pgTable(
   },
   (table) => [
     index('idx_password_reset_user').on(table.userId),
+    index('idx_password_reset_expires').on(table.expiresAt),
     uniqueIndex('idx_password_reset_token_hash_unique').on(table.tokenHash),
+  ],
+);
+
+// ============================================================
+// OTP VERIFICATIONS (login / signup 2FA)
+// ============================================================
+export const otpVerifications = pgTable(
+  'otp_verifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: varchar('purpose', { length: 20 }).notNull(), // 'login' | 'signup' | 'password_reset'
+    email: varchar('email', { length: 255 }),
+    phone: varchar('phone', { length: 20 }),
+    codeHash: varchar('code_hash', { length: 255 }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_otp_verifications_user').on(table.userId),
+    index('idx_otp_verifications_expires').on(table.expiresAt),
   ],
 );
 
@@ -304,6 +332,8 @@ export const events = pgTable(
       .notNull()
       .references(() => categories.id),
     coverImageUrl: varchar('cover_image_url', { length: 500 }),
+    /** Nav chrome on event detail: light banner → dark ink, dark banner → white ink */
+    coverNavTone: varchar('cover_nav_tone', { length: 5 }),
     startTime: timestamp('start_time', { withTimezone: true }).notNull(),
     endTime: timestamp('end_time', { withTimezone: true }).notNull(),
     latitude: decimal('latitude', { precision: 10, scale: 7 }).notNull(),
@@ -365,9 +395,10 @@ export const conversations = pgTable(
   'conversations',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    type: varchar('type', { length: 20 }).notNull(), // dm, event_chat, club_discussion, club_announcement
+    type: varchar('type', { length: 20 }).notNull(), // dm, group, event_chat, club_announcement
     eventId: uuid('event_id').references(() => events.id, { onDelete: 'cascade' }),
     clubId: uuid('club_id').references(() => users.id, { onDelete: 'cascade' }),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
     title: varchar('title', { length: 200 }),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
     isActive: boolean('is_active').default(true),
@@ -376,6 +407,8 @@ export const conversations = pgTable(
   (table) => [
     index('idx_conversations_type').on(table.type),
     index('idx_conversations_last_message').on(table.lastMessageAt),
+    uniqueIndex('idx_conversations_event_unique').on(table.eventId),
+    uniqueIndex('idx_conversations_club_announcement_unique').on(table.clubId),
   ],
 );
 
@@ -453,6 +486,51 @@ export const notifications = pgTable(
 );
 
 // ============================================================
+// MODERATION — reports & per-user hides
+// ============================================================
+export const reports = pgTable(
+  'reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reporterId: uuid('reporter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    targetType: varchar('target_type', { length: 20 }).notNull(), // post | user | event
+    targetId: uuid('target_id').notNull(),
+    reason: varchar('reason', { length: 50 }).notNull(),
+    description: text('description'),
+    status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | reviewed | actioned | dismissed
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_reports_status').on(table.status),
+    index('idx_reports_target').on(table.targetType, table.targetId),
+    uniqueIndex('idx_reports_reporter_target').on(
+      table.reporterId,
+      table.targetType,
+      table.targetId,
+    ),
+  ],
+);
+
+export const contentHides = pgTable(
+  'content_hides',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    targetType: varchar('target_type', { length: 20 }).notNull(), // post | user | event
+    targetId: uuid('target_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('idx_content_hides_user_target').on(table.userId, table.targetType, table.targetId),
+    index('idx_content_hides_user').on(table.userId),
+  ],
+);
+
+// ============================================================
 // REFRESH TOKENS
 // ============================================================
 export const refreshTokens = pgTable(
@@ -463,11 +541,120 @@ export const refreshTokens = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     tokenHash: varchar('token_hash', { length: 255 }).notNull(),
+    /** Shared across every token descended from the same login — enables reuse-detection
+     *  to revoke the whole lineage if a rotated/revoked token is presented again. */
+    familyId: uuid('family_id').notNull().defaultRandom(),
     deviceInfo: varchar('device_info', { length: 255 }),
+    deviceLabel: varchar('device_label', { length: 100 }),
+    ip: varchar('ip', { length: 64 }),
+    userAgent: varchar('user_agent', { length: 500 }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    /** Set on rotation, logout, or reuse-detection revocation. Row is kept (not deleted)
+     *  so a later replay of the same token can be recognised as theft. */
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('idx_refresh_tokens_user').on(table.userId)],
+  (table) => [
+    index('idx_refresh_tokens_user').on(table.userId),
+    index('idx_refresh_tokens_expires').on(table.expiresAt),
+    index('idx_refresh_tokens_family').on(table.familyId),
+    uniqueIndex('idx_refresh_tokens_hash_unique').on(table.tokenHash),
+  ],
+);
+
+// ============================================================
+// ACCOUNT LINK TOKENS — OAuth login matched an existing email/password
+// account by verified email; user must prove ownership before linking.
+// ============================================================
+export const accountLinkTokens = pgTable(
+  'account_link_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    existingUserId: uuid('existing_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 20 }).notNull(), // google | apple
+    providerId: varchar('provider_id', { length: 255 }).notNull(),
+    oauthEmail: varchar('oauth_email', { length: 255 }),
+    tokenHash: varchar('token_hash', { length: 255 }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_account_link_tokens_user').on(table.existingUserId),
+    uniqueIndex('idx_account_link_tokens_hash_unique').on(table.tokenHash),
+  ],
+);
+
+// ============================================================
+// AUTH AUDIT LOG — security-relevant identity events
+// ============================================================
+export const authAuditLog = pgTable(
+  'auth_audit_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    secondaryUserId: uuid('secondary_user_id').references(() => users.id, { onDelete: 'set null' }),
+    eventType: varchar('event_type', { length: 50 }).notNull(),
+    method: varchar('method', { length: 30 }),
+    ip: varchar('ip', { length: 64 }),
+    userAgent: varchar('user_agent', { length: 500 }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_auth_audit_user').on(table.userId),
+    index('idx_auth_audit_event_type').on(table.eventType),
+    index('idx_auth_audit_created_at').on(table.createdAt),
+  ],
+);
+
+// ============================================================
+// UPLOADS — audit trail binding a presigned R2 object key to its
+// uploader, used to verify ownership before a mediaUrl is accepted.
+// ============================================================
+export const uploads = pgTable(
+  'uploads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    uploaderId: uuid('uploader_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    objectKey: varchar('object_key', { length: 500 }).notNull(),
+    folder: varchar('folder', { length: 20 }).notNull(),
+    contentType: varchar('content_type', { length: 100 }).notNull(),
+    sizeBytes: integer('size_bytes'),
+    presignedAt: timestamp('presigned_at', { withTimezone: true }).notNull().defaultNow(),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('idx_uploads_object_key_unique').on(table.objectKey),
+    index('idx_uploads_uploader').on(table.uploaderId),
+  ],
+);
+
+// ============================================================
+// CONTACT CHANGE REQUESTS — OTP-gated email/phone change on an
+// existing account (never a direct write-through).
+// ============================================================
+export const contactChangeRequests = pgTable(
+  'contact_change_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    field: varchar('field', { length: 10 }).notNull(), // email | phone
+    newValue: varchar('new_value', { length: 255 }).notNull(),
+    codeHash: varchar('code_hash', { length: 255 }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('idx_contact_change_user').on(table.userId)],
 );
 
 // ============================================================

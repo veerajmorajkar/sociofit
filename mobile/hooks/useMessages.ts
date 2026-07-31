@@ -2,17 +2,31 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useIsFocused } from '@react-navigation/native';
 import {
   getConversations,
+  getConversation,
   getMessages,
   sendMessage,
   startDm,
   markConversationRead,
+  createGroup,
+  joinClubAnnouncement,
+  setConversationMuted,
 } from '@/services/messages.service';
+import type { ConversationPermissions } from '@/types/message';
 
 export function useConversations() {
   return useQuery({
     queryKey: ['conversations'],
     queryFn: getConversations,
     staleTime: 1000 * 60,
+  });
+}
+
+export function useConversation(conversationId: string) {
+  return useQuery({
+    queryKey: ['conversation', conversationId],
+    queryFn: () => getConversation(conversationId),
+    enabled: !!conversationId,
+    staleTime: 1000 * 30,
   });
 }
 
@@ -49,6 +63,7 @@ export function useSendMessage(conversationId: string) {
     mutationFn: (content: string) => sendMessage(conversationId, content),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
@@ -64,3 +79,40 @@ export function useStartDm() {
     },
   });
 }
+
+export function useCreateGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ title, memberIds }: { title: string; memberIds: string[] }) =>
+      createGroup(title, memberIds),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+export function useJoinClubAnnouncement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (clubId: string) => joinClubAnnouncement(clubId),
+    onSuccess: (_data, clubId) => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', clubId] });
+    },
+  });
+}
+
+export function useSetConversationMuted(conversationId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (muted: boolean) => setConversationMuted(conversationId, muted),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+    },
+  });
+}
+
+export type ChatPermissions = ConversationPermissions;

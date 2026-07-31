@@ -25,5 +25,5 @@ module.exports = {
     '@typescript-eslint/no-explicit-any': 'error',
     'no-console': ['warn', { allow: ['warn', 'error'] }],
   },
-  ignorePatterns: ['node_modules/', '.expo/', 'babel.config.js', 'metro.config.js', 'tailwind.config.js'],
+  ignorePatterns: ['node_modules/', '.expo/', 'babel.config.js', 'metro.config.js'],
 };

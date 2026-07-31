@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { View, Pressable, StyleSheet, useWindowDimensions, Animated, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, MessageCircle, Search, CalendarDays, User } from 'lucide-react-native';
-import { colors } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { tapHaptic } from '@/utils/haptics';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const TAB_ICONS = [Home, MessageCircle, Search, CalendarDays, User] as const;
@@ -11,12 +12,16 @@ const TAB_COUNT = 5;
 export default function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
+  const { theme, mode } = useTheme();
+
+  const pillBg = mode === 'light' ? theme.navBackground : theme.surface1;
+  const inactiveIcon = mode === 'light' ? theme.textSecondary : theme.textMuted;
 
   const pillWidth = Math.round(screenWidth * 0.88);
   const slotWidth = pillWidth / TAB_COUNT;
   const circleSize = Math.round(slotWidth * 0.72);
   const iconSize = Math.round(circleSize * 0.42);
-  const searchSize = Math.round(circleSize * 0.46); // slightly larger center icon
+  const searchSize = Math.round(circleSize * 0.46);
   const pillPad = Math.round(circleSize * 0.18);
   const pillHeight = circleSize + pillPad * 2;
   const pillRadius = pillHeight / 2;
@@ -48,20 +53,44 @@ export default function FloatingTabBar({ state, navigation }: BottomTabBarProps)
   }, [state.index]);
 
   return (
-    <View style={[styles.outer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+    <View style={[s.outer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
       <View
-        style={[styles.pill, { width: pillWidth, height: pillHeight, borderRadius: pillRadius }]}
+        style={[
+          s.pill,
+          {
+            width: pillWidth,
+            height: pillHeight,
+            borderRadius: pillRadius,
+            backgroundColor: pillBg,
+            borderWidth: 1,
+            borderColor: theme.navBorder,
+          },
+          Platform.select({
+            ios: {
+              shadowColor: mode === 'light' ? theme.purpleDeep : theme.purpleHero,
+              shadowOffset: { width: 0, height: mode === 'light' ? 6 : -2 },
+              shadowOpacity: mode === 'light' ? 0.24 : 0.1,
+              shadowRadius: mode === 'light' ? 22 : 16,
+            },
+            android: { elevation: mode === 'light' ? 14 : 16 },
+          }),
+        ]}
       >
-        {/* Neumorphic inner highlight */}
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { borderRadius: pillRadius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
-          ]}
-          pointerEvents="none"
-        />
+        {mode === 'dark' ? (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                borderRadius: pillRadius,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.04)',
+              },
+            ]}
+            pointerEvents="none"
+          />
+        ) : null}
 
-        {/* Animated active indicator */}
+        {/* Animated active indicator — teal circle unchanged */}
         <Animated.View
           style={{
             position: 'absolute',
@@ -70,11 +99,11 @@ export default function FloatingTabBar({ state, navigation }: BottomTabBarProps)
             width: circleSize,
             height: circleSize,
             borderRadius: circleSize / 2,
-            backgroundColor: colors.tealPrimary,
+            backgroundColor: theme.tealPrimary,
             transform: [{ translateX: circleX }, { scale: circleScale }],
             ...Platform.select({
               ios: {
-                shadowColor: colors.tealPrimary,
+                shadowColor: theme.tealPrimary,
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.45,
                 shadowRadius: 14,
@@ -87,8 +116,8 @@ export default function FloatingTabBar({ state, navigation }: BottomTabBarProps)
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
           const Icon = TAB_ICONS[index];
-          if (!Icon) return null; // hidden tabs (e.g. post) have no icon slot
-          const isCenter = index === 2; // Search is center
+          if (!Icon) return null;
+          const isCenter = index === 2;
 
           const onPress = () => {
             const event = navigation.emit({
@@ -97,6 +126,7 @@ export default function FloatingTabBar({ state, navigation }: BottomTabBarProps)
               canPreventDefault: true,
             });
             if (!isFocused && !event.defaultPrevented) {
+              tapHaptic();
               navigation.navigate(route.name);
             }
           };
@@ -118,7 +148,7 @@ export default function FloatingTabBar({ state, navigation }: BottomTabBarProps)
               <Icon
                 size={isCenter ? searchSize : iconSize}
                 strokeWidth={isFocused ? 2.5 : 1.5}
-                color={isFocused ? colors.onTeal : colors.textMuted}
+                color={isFocused ? theme.onTeal : inactiveIcon}
               />
             </Pressable>
           );
@@ -128,7 +158,7 @@ export default function FloatingTabBar({ state, navigation }: BottomTabBarProps)
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   outer: {
     position: 'absolute',
     bottom: 0,
@@ -139,15 +169,5 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface2,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.5,
-        shadowRadius: 16,
-      },
-      android: { elevation: 16 },
-    }),
   },
 });

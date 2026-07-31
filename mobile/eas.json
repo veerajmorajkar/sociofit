@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.1.107:3000/api/v1",
+        "EXPO_PUBLIC_API_URL": "http://192.168.29.156:3000/api/v1",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
         "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII"
@@ -16,8 +16,12 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "beta",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-staging-api.example.com/api/v1",
+        "EXPO_PUBLIC_API_URL": "https://api.mumbaifitnessmafia.com/api/v1",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
         "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII"
@@ -25,7 +29,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.fitsocial.app/api/v1",
+        "EXPO_PUBLIC_API_URL": "https://api.mumbaifitnessmafia.com/api/v1",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII",
         "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyDyhLJVW2iasNvrSCHT2SKTubZCXE_LXII"

@@ -22,7 +22,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,10 +47,14 @@ import {
 } from 'lucide-react-native';
 import UserAvatar from '@/components/ui/UserAvatar';
 import TabBarBottomFade from '@/components/ui/TabBarBottomFade';
-import { colors, fonts, radius, neumorph } from '@/constants/theme';
+import SearchTopScrim from '@/components/ui/SearchTopScrim';
+import { colors, fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { accountTypeBadgeLabel } from '@/constants/accountType';
+import { EVENT_CATEGORY_FILTER_OPTIONS } from '@/constants/eventCategories';
 import {
   useUserSearch,
-  usePeopleSearch,
+  useAthletesSearch,
   useClubSearch,
   useEventSearch,
   useMapEvents,
@@ -67,7 +71,35 @@ import { formatEventDate } from '@/utils/formatDate';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-/** City-wide view — easy to see pins without pinching */
+/** Search bar + filter pills approximate height below safe area */
+const MAP_TOP_CHROME = 110;
+
+/**
+ * Shift map center so a coordinate sits in the middle of the visible map area
+ * above the bottom sheet (animateToRegion centers on the full map view otherwise).
+ */
+function getMapFocusRegion(
+  lat: number,
+  lng: number,
+  opts: { insetsTop: number; sheetHeight: number; latitudeDelta?: number; pinHeight?: number },
+) {
+  const latitudeDelta = opts.latitudeDelta ?? 0.06;
+  const topPad = opts.insetsTop + MAP_TOP_CHROME;
+  const visibleCenterY = topPad + (SCREEN_H - topPad - opts.sheetHeight) / 2;
+  const mapCenterY = SCREEN_H / 2;
+  const screenOffset = mapCenterY - visibleCenterY;
+  const latOffset = (screenOffset / SCREEN_H) * latitudeDelta;
+  // Pin anchor is at the tip (bottom); nudge center so the pin body reads centered.
+  const pinHeight = opts.pinHeight ?? 40;
+  const pinAnchorOffset = (pinHeight / 2 / SCREEN_H) * latitudeDelta;
+  return {
+    latitude: lat - latOffset - pinAnchorOffset,
+    longitude: lng,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta,
+  };
+}
+
 const MUMBAI_REGION = {
   latitude: 19.076,
   longitude: 72.8777,
@@ -75,7 +107,6 @@ const MUMBAI_REGION = {
   longitudeDelta: 0.32,
 };
 
-/** Greater Mumbai — ignore simulator / overseas GPS (e.g. SF default) */
 function isInGreaterMumbai(lat: number, lng: number): boolean {
   return lat >= 18.85 && lat <= 19.35 && lng >= 72.72 && lng <= 73.05;
 }
@@ -90,23 +121,12 @@ function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Default sheet — shows Events near you + a peek of Recent searches */
 const SHEET_PEEK = 348;
 const MAX_RECENT_VISIBLE = 8;
 const SHEET_MID = 440;
 const SHEET_PREVIEW = Math.min(SCREEN_H * 0.58, 520);
 const SHEET_FULL = SCREEN_H * 0.78;
 const NEARBY_RADIUS_KM = 12;
-
-const ACTIVITY_FILTERS = [
-  { slug: 'running', label: 'Running' },
-  { slug: 'cycling', label: 'Cycling' },
-  { slug: 'yoga_zumba', label: 'Yoga / Zumba' },
-  { slug: 'sports_games', label: 'Sports' },
-  { slug: 'treks', label: 'Treks' },
-  { slug: 'fun_events', label: 'Fun Events' },
-  { slug: 'gym', label: 'Gym' },
-];
 
 // ── Error boundary — catches native module unavailability in Expo Go ──
 interface BoundaryState {
@@ -125,10 +145,15 @@ class MapBoundary extends Component<{ children: React.ReactNode }, BoundaryState
     return (
       <LinearGradient colors={['#0E0E14', '#17172A', '#1a1030']} style={StyleSheet.absoluteFill}>
         <View style={fb.center}>
-          <MapIcon size={40} strokeWidth={1.25} color={colors.surface3} />
-          <Text style={fb.title}>MAP UNAVAILABLE</Text>
-          <Text style={fb.sub}>Requires a development or production build</Text>
-          <Text style={fb.hint}>Use: npx expo run:ios</Text>
+          <View style={fb.iconRing}>
+            <MapIcon size={36} strokeWidth={1.35} color={colors.tealPrimary} />
+          </View>
+          <Text style={fb.title}>Map needs a full build</Text>
+          <Text style={fb.sub}>
+            Maps aren’t available in Expo Go. Use a development or production build to explore
+            events nearby.
+          </Text>
+          <Text style={fb.hint}>npx expo run:ios · then reopen Search</Text>
         </View>
       </LinearGradient>
     );
@@ -137,7 +162,8 @@ class MapBoundary extends Component<{ children: React.ReactNode }, BoundaryState
 
 // ── Event map pin ─────────────────────────────────────────────
 function EventPin({ event, size, selected }: { event: Event; size: number; selected: boolean }) {
-  const ringColor = selected ? colors.purpleSoft : colors.purpleHero;
+  const { theme } = useTheme();
+  const ringColor = selected ? theme.purpleSoft : theme.purpleHero;
   return (
     <View style={mp.wrap}>
       <View
@@ -149,7 +175,8 @@ function EventPin({ event, size, selected }: { event: Event; size: number; selec
             borderRadius: size / 2,
             borderColor: ringColor,
             borderWidth: selected ? 3 : 2.5,
-            shadowColor: colors.purpleBrand,
+            shadowColor: theme.purpleBrand,
+            backgroundColor: theme.surface2,
           },
         ]}
       >
@@ -160,8 +187,8 @@ function EventPin({ event, size, selected }: { event: Event; size: number; selec
             contentFit="cover"
           />
         ) : (
-          <View style={mp.fallback}>
-            <Calendar size={Math.round(size * 0.38)} strokeWidth={2} color={colors.purpleSoft} />
+          <View style={[mp.fallback, { backgroundColor: theme.surface1 }]}>
+            <Calendar size={Math.round(size * 0.38)} strokeWidth={2} color={theme.purpleSoft} />
           </View>
         )}
       </View>
@@ -182,33 +209,55 @@ function FilterPill({
   onPress: () => void;
   icon: React.ReactNode;
 }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
-      style={[fp.pill, neumorph.glassPill, active && fp.pillActive]}
+      style={[
+        fp.pill,
+        {
+          backgroundColor: active ? theme.tealPrimary : theme.glassPill,
+          borderColor: active ? theme.tealPrimary : 'rgba(100,92,150,0.18)',
+          borderWidth: 1,
+          ...(active
+            ? Platform.select({
+                ios: {
+                  shadowColor: theme.tealPrimary,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.16,
+                  shadowRadius: 4,
+                },
+                android: { elevation: 0 },
+              })
+            : {}),
+        },
+      ]}
     >
       {icon}
-      <Text style={[fp.label, active && fp.labelActive]}>{label}</Text>
+      <Text style={[fp.label, { color: active ? theme.onTeal : theme.textMuted }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
 // ── User row ──────────────────────────────────────────────────
 function UserRow({ item }: { item: UserSummary }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
-      style={sr.row}
+      style={[sr.row, { borderBottomColor: theme.surface3 }]}
       onPress={() => router.push(`/profile/${item.id}` as never)}
       activeOpacity={0.82}
     >
       <UserAvatar name={item.displayName} avatarUrl={item.avatarUrl} size={42} />
       <View style={{ flex: 1 }}>
-        <Text style={sr.name}>{item.displayName}</Text>
-        <Text style={sr.sub}>@{item.username}</Text>
+        <Text style={[sr.name, { color: theme.textPrimary }]}>{item.displayName}</Text>
+        <Text style={[sr.sub, { color: theme.textMuted }]}>@{item.username}</Text>
       </View>
-      <View style={sr.badge}>
-        <Text style={sr.badgeText}>{item.accountType === 'club' ? 'CLUB' : 'PERSON'}</Text>
+      <View style={[sr.badge, { backgroundColor: theme.surface3 }]}>
+        <Text style={[sr.badgeText, { color: theme.textMuted }]}>
+          {accountTypeBadgeLabel(item.accountType)}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -216,13 +265,14 @@ function UserRow({ item }: { item: UserSummary }) {
 
 // ── Event row ─────────────────────────────────────────────────
 function EventRow({ item }: { item: Event }) {
+  const { theme } = useTheme();
   return (
     <TouchableOpacity
-      style={sr.row}
+      style={[sr.row, { borderBottomColor: theme.surface3 }]}
       onPress={() => router.push(`/event/${item.id}` as never)}
       activeOpacity={0.82}
     >
-      <View style={sr.thumb}>
+      <View style={[sr.thumb, { backgroundColor: theme.surface2 }]}>
         {item.coverImageUrl ? (
           <Image
             source={{ uri: item.coverImageUrl }}
@@ -230,20 +280,20 @@ function EventRow({ item }: { item: Event }) {
             contentFit="cover"
           />
         ) : (
-          <Calendar size={20} strokeWidth={1.5} color={colors.tealPrimary} />
+          <Calendar size={20} strokeWidth={1.5} color={theme.tealPrimary} />
         )}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={sr.name} numberOfLines={1}>
+        <Text style={[sr.name, { color: theme.textPrimary }]} numberOfLines={1}>
           {item.title}
         </Text>
-        <Text style={sr.sub}>{formatEventDate(item.startTime)}</Text>
-        <Text style={sr.sub} numberOfLines={1}>
+        <Text style={[sr.sub, { color: theme.textMuted }]}>{formatEventDate(item.startTime)}</Text>
+        <Text style={[sr.sub, { color: theme.textMuted }]} numberOfLines={1}>
           {item.locationName}
         </Text>
       </View>
-      <View style={[sr.badge, sr.eventBadge]}>
-        <Text style={sr.badgeText}>EVENT</Text>
+      <View style={[sr.badge, { backgroundColor: 'rgba(0,200,172,0.12)' }]}>
+        <Text style={[sr.badgeText, { color: theme.tealPrimary }]}>EVENT</Text>
       </View>
     </TouchableOpacity>
   );
@@ -251,6 +301,7 @@ function EventRow({ item }: { item: Event }) {
 
 // ── Event preview card ────────────────────────────────────────
 function EventPreviewCard({ event, onDismiss }: { event: Event; onDismiss: () => void }) {
+  const { theme } = useTheme();
   const myId = useAuthStore((s) => s.user?.id);
   const isOwn = myId === event.organiser.id;
   const [following, setFollowing] = useState(false);
@@ -277,8 +328,9 @@ function EventPreviewCard({ event, onDismiss }: { event: Event; onDismiss: () =>
   const isFree = !event.priceInr || event.priceInr === 0;
 
   return (
-    <View style={pc.card}>
-      {/* Banner */}
+    <View
+      style={[pc.card, { backgroundColor: theme.surface1, borderColor: 'rgba(0,200,172,0.12)' }]}
+    >
       <TouchableOpacity
         onPress={() => router.push(`/event/${event.id}` as never)}
         activeOpacity={0.92}
@@ -287,18 +339,26 @@ function EventPreviewCard({ event, onDismiss }: { event: Event; onDismiss: () =>
           <Image source={{ uri: event.coverImageUrl }} style={pc.banner} contentFit="cover" />
         ) : (
           <LinearGradient colors={['#1a1030', '#2a1860']} style={pc.banner}>
-            <Calendar size={36} strokeWidth={1.5} color={colors.tealPrimary} />
+            <Calendar size={36} strokeWidth={1.5} color={theme.tealPrimary} />
           </LinearGradient>
         )}
-
         {event.status === 'live' && (
           <View style={pc.liveBadge}>
             <View style={pc.liveDot} />
             <Text style={pc.liveBadgeText}>LIVE</Text>
           </View>
         )}
-        <View style={[pc.pricePill, isFree && pc.freePill]}>
-          <Text style={[pc.priceText, isFree && pc.freeText]}>
+        <View
+          style={[
+            pc.pricePill,
+            isFree && {
+              backgroundColor: 'rgba(0,200,172,0.18)',
+              borderWidth: 1,
+              borderColor: theme.tealPrimary,
+            },
+          ]}
+        >
+          <Text style={[pc.priceText, { color: isFree ? theme.tealPrimary : theme.textPrimary }]}>
             {isFree ? 'FREE' : `₹${Math.round((event.priceInr ?? 0) / 100)}`}
           </Text>
         </View>
@@ -307,9 +367,8 @@ function EventPreviewCard({ event, onDismiss }: { event: Event; onDismiss: () =>
         </Pressable>
       </TouchableOpacity>
 
-      {/* Organiser */}
       <View style={pc.orgRow}>
-        <View style={pc.avatarRing}>
+        <View style={[pc.avatarRing, { borderColor: theme.tealPrimary }]}>
           <UserAvatar
             name={event.organiser.displayName}
             avatarUrl={event.organiser.avatarUrl}
@@ -318,79 +377,86 @@ function EventPreviewCard({ event, onDismiss }: { event: Event; onDismiss: () =>
           />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={pc.orgName} numberOfLines={1}>
+          <Text style={[pc.orgName, { color: theme.textPrimary }]} numberOfLines={1}>
             {event.organiser.displayName}
           </Text>
-          <Text style={pc.orgType}>
-            {event.organiser.accountType === 'club' ? 'CLUB' : 'ATHLETE'}
+          <Text style={[pc.orgType, { color: theme.textMuted }]}>
+            {accountTypeBadgeLabel(event.organiser.accountType)}
           </Text>
         </View>
         {!isOwn && (
           <TouchableOpacity
             onPress={() => void handleFollow()}
-            style={[pc.followBtn, following && pc.followingBtn]}
+            style={[
+              pc.followBtn,
+              { backgroundColor: following ? 'transparent' : theme.tealPrimary },
+              following && { borderWidth: 1, borderColor: theme.tealPrimary },
+            ]}
             disabled={followLoading}
             activeOpacity={0.8}
           >
             {followLoading ? (
               <ActivityIndicator
                 size="small"
-                color={following ? colors.tealPrimary : colors.onTeal}
+                color={following ? theme.tealPrimary : theme.onTeal}
               />
             ) : following ? (
               <>
-                <UserCheck size={13} strokeWidth={2.5} color={colors.tealPrimary} />
-                <Text style={[pc.followText, { color: colors.tealPrimary }]}>Following</Text>
+                <UserCheck size={13} strokeWidth={2.5} color={theme.tealPrimary} />
+                <Text style={[pc.followText, { color: theme.tealPrimary }]}>Following</Text>
               </>
             ) : (
               <>
-                <UserPlus size={13} strokeWidth={2.5} color={colors.onTeal} />
-                <Text style={pc.followText}>Follow</Text>
+                <UserPlus size={13} strokeWidth={2.5} color={theme.onTeal} />
+                <Text style={[pc.followText, { color: theme.onTeal }]}>Follow</Text>
               </>
             )}
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Title */}
-      <Text style={pc.title} numberOfLines={2}>
+      <Text style={[pc.title, { color: theme.textPrimary }]} numberOfLines={2}>
         {event.title}
       </Text>
 
-      {/* Meta */}
       <View style={pc.metaRow}>
         <View style={pc.metaItem}>
-          <MapPin size={13} strokeWidth={2} color={colors.tealPrimary} />
-          <Text style={pc.metaText} numberOfLines={1}>
+          <MapPin size={13} strokeWidth={2} color={theme.tealPrimary} />
+          <Text style={[pc.metaText, { color: theme.textSecondary }]} numberOfLines={1}>
             {event.locationName}
           </Text>
         </View>
         <View style={pc.metaItem}>
-          <Calendar size={13} strokeWidth={2} color={colors.purpleSoft} />
-          <Text style={pc.metaText}>{formatEventDate(event.startTime)}</Text>
+          <Calendar size={13} strokeWidth={2} color={theme.purpleSoft} />
+          <Text style={[pc.metaText, { color: theme.textSecondary }]}>
+            {formatEventDate(event.startTime)}
+          </Text>
         </View>
       </View>
 
-      {/* Footer */}
       <View style={pc.footer}>
         {event.category && (
-          <View style={pc.catTag}>
-            <Text style={pc.catText}>{event.category.name.toUpperCase()}</Text>
+          <View style={[pc.catTag, { backgroundColor: theme.surface3 }]}>
+            <Text style={[pc.catText, { color: theme.purpleSoft }]}>
+              {event.category.name.toUpperCase()}
+            </Text>
           </View>
         )}
         {event.participantCount !== null && (
-          <View style={pc.partTag}>
-            <Users size={11} strokeWidth={2} color={colors.textMuted} />
-            <Text style={pc.partText}>{event.participantCount} joined</Text>
+          <View style={[pc.partTag, { backgroundColor: theme.surface2 }]}>
+            <Users size={11} strokeWidth={2} color={theme.textMuted} />
+            <Text style={[pc.partText, { color: theme.textMuted }]}>
+              {event.participantCount} joined
+            </Text>
           </View>
         )}
         <TouchableOpacity
           onPress={() => router.push(`/event/${event.id}` as never)}
-          style={pc.openBtn}
+          style={[pc.openBtn, { backgroundColor: theme.tealPrimary }]}
           activeOpacity={0.8}
         >
-          <Text style={pc.openText}>View Event</Text>
-          <ChevronRight size={13} strokeWidth={2.5} color={colors.onTeal} />
+          <Text style={[pc.openText, { color: theme.onTeal }]}>View Event</Text>
+          <ChevronRight size={13} strokeWidth={2.5} color={theme.onTeal} />
         </TouchableOpacity>
       </View>
     </View>
@@ -400,6 +466,7 @@ function EventPreviewCard({ event, onDismiss }: { event: Event; onDismiss: () =>
 // ── Main Screen ───────────────────────────────────────────────
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const mapRef = useRef<MapView>(null);
   const hasFittedEventsRef = useRef(false);
 
@@ -423,7 +490,6 @@ export default function SearchScreen() {
     mapRef.current?.animateToRegion(r, 600);
   }, []);
 
-  // Open on Mumbai; only auto-follow GPS when in Greater Mumbai (not simulator SF)
   useEffect(() => {
     const t = setTimeout(() => mapRef.current?.animateToRegion(MUMBAI_REGION, 0), 100);
     void (async () => {
@@ -445,7 +511,6 @@ export default function SearchScreen() {
     return () => clearTimeout(t);
   }, [centerOnUser]);
 
-  // Search
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<SearchFilter>('all');
   const [activitySlugs, setActivitySlugs] = useState<string[]>([]);
@@ -456,13 +521,37 @@ export default function SearchScreen() {
   const dQ = useDebouncedValue(query, 320);
   const { history, addToHistory, removeFromHistory, clearHistory } = useSearchHistory();
   const isSearching = dQ.trim().length > 0;
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const lastHistoryTermRef = useRef('');
 
-  // Data hooks
+  useEffect(() => {
+    const trimmed = dQ.trim();
+    if (trimmed.length < 1) {
+      lastHistoryTermRef.current = '';
+      return;
+    }
+    if (trimmed === lastHistoryTermRef.current) return;
+    lastHistoryTermRef.current = trimmed;
+    addToHistory(trimmed);
+  }, [dQ, addToHistory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        const trimmed = queryRef.current.trim();
+        if (trimmed.length >= 1) addToHistory(trimmed);
+      };
+    }, [addToHistory]),
+  );
+
   const { data: userRes = [], isFetching: fU } = useUserSearch(
-    filter === 'all' || filter === 'people' ? dQ : '',
+    filter === 'all' || filter === 'athletes' ? dQ : '',
   );
   const { data: clubRes = [], isFetching: fC } = useClubSearch(filter === 'clubs' ? dQ : '');
-  const { data: peopleRes = [], isFetching: fP } = usePeopleSearch(filter === 'people' ? dQ : '');
+  const { data: athletesRes = [], isFetching: fP } = useAthletesSearch(
+    filter === 'athletes' ? dQ : '',
+  );
   const activityFilter = activitySlugs.length > 0 ? activitySlugs : undefined;
   const { data: evPage, isFetching: fE } = useEventSearch(
     filter === 'all' || filter === 'events' ? dQ : '',
@@ -502,14 +591,10 @@ export default function SearchScreen() {
     hasFittedEventsRef.current = false;
   }, [activitySlugs, filter]);
 
-  // Frame event pins once when they load (keeps map on Mumbai, not simulator SF)
   useEffect(() => {
     if (hasFittedEventsRef.current || mapPins.length === 0) return;
     const coords = mapPins
-      .map((ev) => ({
-        latitude: parseFloat(ev.latitude),
-        longitude: parseFloat(ev.longitude),
-      }))
+      .map((ev) => ({ latitude: parseFloat(ev.latitude), longitude: parseFloat(ev.longitude) }))
       .filter(
         (c) =>
           !Number.isNaN(c.latitude) &&
@@ -533,7 +618,7 @@ export default function SearchScreen() {
   }, [latDelta]);
 
   const displayResults = useMemo(() => {
-    if (filter === 'people') return { users: peopleRes, events: [] as Event[] };
+    if (filter === 'athletes') return { users: athletesRes, events: [] as Event[] };
     if (filter === 'clubs') return { users: clubRes, events: [] as Event[] };
     if (filter === 'events') return { users: [], events: evRes };
     if (filter === 'location') {
@@ -546,12 +631,11 @@ export default function SearchScreen() {
       return { users: [], events: nearby };
     }
     return { users: userRes, events: evRes };
-  }, [filter, peopleRes, clubRes, evRes, userRes, eventsNearYou, dQ]);
+  }, [filter, athletesRes, clubRes, evRes, userRes, eventsNearYou, dQ]);
 
   const fetching = fU || fC || fP || fE;
   const hasResults = displayResults.users.length > 0 || displayResults.events.length > 0;
 
-  // Bottom sheet
   const sheetAnim = useRef(new Animated.Value(SHEET_PEEK)).current;
   const lastH = useRef(SHEET_PEEK);
 
@@ -575,16 +659,24 @@ export default function SearchScreen() {
       setSelectedEvent(null);
       setFilter(next);
       if (next === 'location') {
-        if (userCoords && isInGreaterMumbai(userCoords.latitude, userCoords.longitude)) {
+        if (userCoords && isInGreaterMumbai(userCoords.latitude, userCoords.longitude))
           centerOnUser(userCoords.latitude, userCoords.longitude);
-        } else {
-          centerOnMumbai();
-        }
+        else centerOnMumbai();
         snapRef.current(SHEET_PEEK);
       }
     },
     [userCoords, centerOnUser, centerOnMumbai],
   );
+
+  // Deep-linkable filter (e.g. feed empty state → people discovery).
+  const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
+  useEffect(() => {
+    if (filterParam === 'athletes') {
+      applyFilter('athletes');
+      snapRef.current(SHEET_MID);
+      router.setParams({ filter: undefined });
+    }
+  }, [filterParam, applyFilter]);
 
   const pan = useRef(
     PanResponder.create({
@@ -609,10 +701,24 @@ export default function SearchScreen() {
       snap(SHEET_MID);
     }
   }, [focused, isSearching, snap]);
-
   useEffect(() => {
     if (hasResults && isSearching) snap(SHEET_FULL);
   }, [hasResults, isSearching, snap]);
+
+  const focusMapOnEvent = useCallback(
+    (lat: number, lng: number, sheetHeight: number) => {
+      const focusRegion = getMapFocusRegion(lat, lng, {
+        insetsTop: insets.top,
+        sheetHeight,
+        latitudeDelta: 0.055,
+        pinHeight: pinSize + 12,
+      });
+      mapRef.current?.animateToRegion(focusRegion, 520);
+      setRegion(focusRegion);
+      setLatDelta(focusRegion.latitudeDelta);
+    },
+    [insets.top, pinSize],
+  );
 
   const openEventPreview = useCallback(
     (ev: Event) => {
@@ -625,13 +731,13 @@ export default function SearchScreen() {
       const lat = parseFloat(ev.latitude);
       const lng = parseFloat(ev.longitude);
       if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-        mapRef.current?.animateToRegion(
-          { latitude: lat, longitude: lng, latitudeDelta: 0.06, longitudeDelta: 0.06 },
-          400,
-        );
+        // Run after sheet starts moving so padding matches the preview height.
+        requestAnimationFrame(() => {
+          focusMapOnEvent(lat, lng, SHEET_PREVIEW);
+        });
       }
     },
-    [snap],
+    [snap, focusMapOnEvent],
   );
 
   const dismissPreview = useCallback(() => {
@@ -644,14 +750,13 @@ export default function SearchScreen() {
     () =>
       categories.length > 0
         ? categories.map((c) => ({ slug: c.slug, label: c.name }))
-        : ACTIVITY_FILTERS,
+        : EVENT_CATEGORY_FILTER_OPTIONS,
     [categories],
   );
   const activityLabel = useMemo(() => {
     if (activitySlugs.length === 0) return 'Activity';
-    if (activitySlugs.length === 1) {
+    if (activitySlugs.length === 1)
       return activityOpts.find((a) => a.slug === activitySlugs[0])?.label ?? 'Activity';
-    }
     const first = activityOpts.find((a) => a.slug === activitySlugs[0])?.label ?? 'Activity';
     return `${first} +${activitySlugs.length - 1}`;
   }, [activitySlugs, activityOpts]);
@@ -670,7 +775,7 @@ export default function SearchScreen() {
 
   return (
     <View style={s.root}>
-      {/* ── Map ───────────────────────────────────────────── */}
+      {/* ── Map — dark tiles kept in both modes (Step 7) ── */}
       <MapBoundary>
         <MapView
           ref={mapRef}
@@ -729,31 +834,41 @@ export default function SearchScreen() {
         </MapView>
       </MapBoundary>
 
-      {/* ── Overlay: search bar + filters ─────────────────── */}
+      {/* ── Overlay: search bar + filters ─── */}
       <View style={s.overlay}>
-        <LinearGradient
-          pointerEvents="none"
-          colors={[
-            colors.bgPrimary,
-            'rgba(14,14,20,0.7)',
-            'rgba(14,14,20,0.34)',
-            'rgba(14,14,20,0)',
-          ]}
-          locations={[0, 0.38, 0.72, 1]}
-          style={s.overlayScrim}
-        />
+        <SearchTopScrim />
         <View style={[s.overlayContent, { paddingTop: insets.top + 10 }]}>
           {/* Search bar */}
-          <View style={[s.searchBar, neumorph.glass, focused && neumorph.glassFocus]}>
+          <View
+            style={[
+              s.searchBar,
+              {
+                backgroundColor: theme.glass,
+                borderColor: focused ? theme.tealPrimary : 'rgba(120,110,170,0.2)',
+                borderWidth: 1,
+                ...(focused
+                  ? Platform.select({
+                      ios: {
+                        shadowColor: theme.tealPrimary,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 6,
+                      },
+                      android: { elevation: 0 },
+                    })
+                  : {}),
+              },
+            ]}
+          >
             <SearchIcon
               size={18}
               strokeWidth={1.75}
-              color={focused ? colors.tealPrimary : colors.textMuted}
+              color={focused ? theme.tealPrimary : theme.textMuted}
             />
             <TextInput
-              style={s.input}
-              placeholder="Search people, events, clubs..."
-              placeholderTextColor={colors.textMuted}
+              style={[s.input, { color: theme.textPrimary }]}
+              placeholder="Search athletes, events, clubs..."
+              placeholderTextColor={theme.textMuted}
               value={query}
               onChangeText={(t) => {
                 setQuery(t);
@@ -775,7 +890,7 @@ export default function SearchScreen() {
               returnKeyType="search"
             />
             {fetching ? (
-              <ActivityIndicator size="small" color={colors.tealPrimary} />
+              <ActivityIndicator size="small" color={theme.tealPrimary} />
             ) : query.length > 0 ? (
               <Pressable
                 onPress={() => {
@@ -785,14 +900,19 @@ export default function SearchScreen() {
                 }}
                 hitSlop={10}
               >
-                <View style={s.clearBtn}>
-                  <X size={12} strokeWidth={2.5} color={colors.textPrimary} />
+                <View
+                  style={[
+                    s.clearBtn,
+                    { backgroundColor: theme.surface2, borderColor: theme.surface3 },
+                  ]}
+                >
+                  <X size={12} strokeWidth={2.5} color={theme.textPrimary} />
                 </View>
               </Pressable>
             ) : null}
           </View>
 
-          {/* Filter pills — All, then Activity */}
+          {/* Filter pills */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -807,7 +927,7 @@ export default function SearchScreen() {
                 <SlidersHorizontal
                   size={12}
                   strokeWidth={2}
-                  color={filter === 'all' ? colors.onTeal : colors.textMuted}
+                  color={filter === 'all' ? theme.onTeal : theme.textMuted}
                 />
               }
             />
@@ -818,18 +938,29 @@ export default function SearchScreen() {
                 Keyboard.dismiss();
               }}
               activeOpacity={0.8}
-              style={[fp.pill, neumorph.glassPill, activitySlugs.length > 0 && fp.pillActive]}
+              style={[
+                fp.pill,
+                {
+                  backgroundColor: activitySlugs.length > 0 ? theme.tealPrimary : theme.glassPill,
+                  borderColor:
+                    activitySlugs.length > 0 ? theme.tealPrimary : 'rgba(100,92,150,0.18)',
+                  borderWidth: 1,
+                },
+              ]}
             >
               <Dumbbell
                 size={12}
                 strokeWidth={2}
-                color={activitySlugs.length > 0 ? colors.onTeal : colors.textMuted}
+                color={activitySlugs.length > 0 ? theme.onTeal : theme.textMuted}
               />
               <Text
                 style={[
                   fp.label,
-                  activitySlugs.length > 0 && fp.labelActive,
-                  { marginLeft: 5, maxWidth: 120 },
+                  {
+                    marginLeft: 5,
+                    maxWidth: 120,
+                    color: activitySlugs.length > 0 ? theme.onTeal : theme.textMuted,
+                  },
                 ]}
                 numberOfLines={1}
               >
@@ -839,27 +970,27 @@ export default function SearchScreen() {
                 <ChevronUp
                   size={12}
                   strokeWidth={2.5}
-                  color={activitySlugs.length > 0 ? colors.onTeal : colors.textMuted}
+                  color={activitySlugs.length > 0 ? theme.onTeal : theme.textMuted}
                   style={{ marginLeft: 2 }}
                 />
               ) : (
                 <ChevronDown
                   size={12}
                   strokeWidth={2.5}
-                  color={activitySlugs.length > 0 ? colors.onTeal : colors.textMuted}
+                  color={activitySlugs.length > 0 ? theme.onTeal : theme.textMuted}
                   style={{ marginLeft: 2 }}
                 />
               )}
             </TouchableOpacity>
             <FilterPill
-              label="People"
-              active={filter === 'people'}
-              onPress={() => applyFilter('people')}
+              label="Athletes"
+              active={filter === 'athletes'}
+              onPress={() => applyFilter('athletes')}
               icon={
                 <Users
                   size={12}
                   strokeWidth={2}
-                  color={filter === 'people' ? colors.onTeal : colors.textMuted}
+                  color={filter === 'athletes' ? theme.onTeal : theme.textMuted}
                 />
               }
             />
@@ -871,7 +1002,7 @@ export default function SearchScreen() {
                 <Building2
                   size={12}
                   strokeWidth={2}
-                  color={filter === 'clubs' ? colors.onTeal : colors.textMuted}
+                  color={filter === 'clubs' ? theme.onTeal : theme.textMuted}
                 />
               }
             />
@@ -883,7 +1014,7 @@ export default function SearchScreen() {
                 <Calendar
                   size={12}
                   strokeWidth={2}
-                  color={filter === 'events' ? colors.onTeal : colors.textMuted}
+                  color={filter === 'events' ? theme.onTeal : theme.textMuted}
                 />
               }
             />
@@ -895,19 +1026,32 @@ export default function SearchScreen() {
                 <MapPin
                   size={12}
                   strokeWidth={2}
-                  color={filter === 'location' ? colors.onTeal : colors.textMuted}
+                  color={filter === 'location' ? theme.onTeal : theme.textMuted}
                 />
               }
             />
           </ScrollView>
 
           {showDropdown && (
-            <View style={[s.dropdown, neumorph.glassPanel]}>
-              <View style={s.dropHeader}>
-                <Text style={s.dropHeaderText}>Select activities</Text>
+            <View
+              style={[
+                s.dropdown,
+                {
+                  backgroundColor: theme.glassPanel,
+                  borderRadius: radius.lg,
+                  overflow: 'hidden',
+                  borderWidth: 1,
+                  borderColor: 'rgba(90,82,140,0.25)',
+                },
+              ]}
+            >
+              <View style={[s.dropHeader, { borderBottomColor: theme.surface3 }]}>
+                <Text style={[s.dropHeaderText, { color: theme.textMuted }]}>
+                  Select activities
+                </Text>
                 {activitySlugs.length > 0 && (
                   <Pressable onPress={clearActivitySlugs} hitSlop={8}>
-                    <Text style={s.histClear}>Clear</Text>
+                    <Text style={[s.histClear, { color: theme.purpleSoft }]}>Clear</Text>
                   </Pressable>
                 )}
               </View>
@@ -916,37 +1060,60 @@ export default function SearchScreen() {
                 return (
                   <TouchableOpacity
                     key={a.slug}
-                    style={[s.dropItem, s.dropItemRow, selected && s.dropItemOn]}
+                    style={[
+                      s.dropItem,
+                      s.dropItemRow,
+                      selected && { backgroundColor: 'rgba(0,200,172,0.1)' },
+                      { borderBottomColor: theme.surface3 },
+                    ]}
                     onPress={() => toggleActivitySlug(a.slug)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[s.dropText, selected && s.dropTextOn, { flex: 1 }]}>
+                    <Text
+                      style={[
+                        s.dropText,
+                        {
+                          color: selected ? theme.tealPrimary : theme.textSecondary,
+                          fontFamily: selected ? fonts.bodyStrong : fonts.body,
+                          flex: 1,
+                        },
+                      ]}
+                    >
                       {a.label}
                     </Text>
                     {selected ? (
-                      <Check size={16} strokeWidth={2.5} color={colors.tealPrimary} />
+                      <Check size={16} strokeWidth={2.5} color={theme.tealPrimary} />
                     ) : (
-                      <View style={s.dropCheckEmpty} />
+                      <View style={[s.dropCheckEmpty, { borderColor: theme.surface3 }]} />
                     )}
                   </TouchableOpacity>
                 );
               })}
               <TouchableOpacity
-                style={s.dropDone}
+                style={[s.dropDone, { backgroundColor: theme.tealPrimary }]}
                 onPress={() => setShowDropdown(false)}
                 activeOpacity={0.85}
               >
-                <Text style={s.dropDoneText}>Done</Text>
+                <Text style={[s.dropDoneText, { color: theme.onTeal }]}>Done</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
       </View>
 
-      {/* ── Bottom sheet ──────────────────────────────────── */}
-      <Animated.View style={[s.sheet, { height: sheetAnim }]}>
+      {/* ── Bottom sheet ── */}
+      <Animated.View
+        style={[
+          s.sheet,
+          {
+            height: sheetAnim,
+            backgroundColor: theme.surface1,
+            borderColor: 'rgba(0,200,172,0.08)',
+          },
+        ]}
+      >
         <View {...pan.panHandlers} style={s.handleArea}>
-          <View style={s.handleBar} />
+          <View style={[s.handleBar, { backgroundColor: theme.surface3 }]} />
         </View>
 
         <KeyboardAvoidingView
@@ -959,7 +1126,7 @@ export default function SearchScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={s.previewLabel}>EVENT PREVIEW</Text>
+              <Text style={[s.previewLabel, { color: theme.tealPrimary }]}>EVENT PREVIEW</Text>
               <EventPreviewCard event={selectedEvent} onDismiss={dismissPreview} />
             </ScrollView>
           ) : !isSearching ? (
@@ -972,7 +1139,7 @@ export default function SearchScreen() {
             >
               {sheetEvents.length > 0 && (
                 <View style={s.nearbySection}>
-                  <Text style={s.nearbyTitle}>EVENTS NEAR YOU</Text>
+                  <Text style={[s.nearbyTitle, { color: theme.gold }]}>EVENTS NEAR YOU</Text>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -983,7 +1150,14 @@ export default function SearchScreen() {
                     {sheetEvents.slice(0, 12).map((ev: Event) => (
                       <TouchableOpacity
                         key={ev.id}
-                        style={s.nearbyChip}
+                        style={[
+                          s.nearbyChip,
+                          {
+                            backgroundColor: theme.surface2,
+                            borderColor: theme.gold,
+                            shadowColor: theme.gold,
+                          },
+                        ]}
                         onPress={() => openEventPreview(ev)}
                         activeOpacity={0.85}
                       >
@@ -994,11 +1168,20 @@ export default function SearchScreen() {
                             contentFit="cover"
                           />
                         ) : (
-                          <View style={[s.nearbyChipImg, s.nearbyChipFallback]}>
-                            <Calendar size={18} strokeWidth={1.5} color={colors.goldLight} />
+                          <View
+                            style={[
+                              s.nearbyChipImg,
+                              s.nearbyChipFallback,
+                              { backgroundColor: theme.surface1 },
+                            ]}
+                          >
+                            <Calendar size={18} strokeWidth={1.5} color={theme.goldLight} />
                           </View>
                         )}
-                        <Text style={s.nearbyChipTitle} numberOfLines={2}>
+                        <Text
+                          style={[s.nearbyChipTitle, { color: theme.textSecondary }]}
+                          numberOfLines={2}
+                        >
                           {ev.title}
                         </Text>
                       </TouchableOpacity>
@@ -1008,10 +1191,10 @@ export default function SearchScreen() {
               )}
 
               <View style={s.histHeader}>
-                <Text style={s.histTitle}>RECENT SEARCHES</Text>
+                <Text style={[s.histTitle, { color: theme.textMuted }]}>Recent searches</Text>
                 {history.length > 0 && (
                   <Pressable onPress={clearHistory} hitSlop={8}>
-                    <Text style={s.histClear}>Clear all</Text>
+                    <Text style={[s.histClear, { color: theme.purpleSoft }]}>Clear all</Text>
                   </Pressable>
                 )}
               </View>
@@ -1020,18 +1203,18 @@ export default function SearchScreen() {
                   <Clock
                     size={26}
                     strokeWidth={1.5}
-                    color={colors.textMuted}
+                    color={theme.textMuted}
                     style={{ opacity: 0.4 }}
                   />
-                  <Text style={s.emptyHistText}>
-                    Search for people, clubs, or events — they’ll show up here
+                  <Text style={[s.emptyHistText, { color: theme.textMuted }]}>
+                    Search for athletes, clubs, or events — they'll show up here
                   </Text>
                 </View>
               ) : (
                 history.slice(0, MAX_RECENT_VISIBLE).map((term) => (
                   <TouchableOpacity
                     key={term}
-                    style={s.histRow}
+                    style={[s.histRow, { borderBottomColor: theme.surface3 }]}
                     onPress={() => {
                       setQuery(term);
                       setSelectedEvent(null);
@@ -1040,21 +1223,20 @@ export default function SearchScreen() {
                     }}
                     activeOpacity={0.8}
                   >
-                    <Clock size={15} strokeWidth={1.75} color={colors.textMuted} />
-                    <Text style={s.histRowText}>{term}</Text>
+                    <Clock size={15} strokeWidth={1.75} color={theme.textMuted} />
+                    <Text style={[s.histRowText, { color: theme.textSecondary }]}>{term}</Text>
                     <TouchableOpacity
                       onPress={() => removeFromHistory(term)}
                       hitSlop={12}
                       activeOpacity={0.7}
                     >
-                      <X size={14} strokeWidth={2} color={colors.textMuted} />
+                      <X size={14} strokeWidth={2} color={theme.textMuted} />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 ))
               )}
             </ScrollView>
           ) : (
-            /* Search results */
             <FlatList
               data={[
                 ...(displayResults.users as Array<UserSummary | Event>),
@@ -1066,16 +1248,18 @@ export default function SearchScreen() {
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 fetching ? (
-                  <ActivityIndicator color={colors.tealPrimary} style={{ marginTop: 32 }} />
+                  <ActivityIndicator color={theme.tealPrimary} style={{ marginTop: 32 }} />
                 ) : (
                   <View style={s.emptyRes}>
                     <SearchIcon
                       size={30}
                       strokeWidth={1.5}
-                      color={colors.textMuted}
+                      color={theme.textMuted}
                       style={{ opacity: 0.4 }}
                     />
-                    <Text style={s.emptyResText}>No results for "{dQ}"</Text>
+                    <Text style={[s.emptyResText, { color: theme.textMuted }]}>
+                      No results for "{dQ}"
+                    </Text>
                   </View>
                 )
               }
@@ -1092,17 +1276,10 @@ export default function SearchScreen() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────
+// ── Static layout styles (no colours) ────────────────────────
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0e0e14' },
+  root: { flex: 1, backgroundColor: '#0e0e14' }, // Always dark behind the map
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
-  overlayScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 188,
-  },
   overlayContent: { paddingHorizontal: 14 },
   searchBar: {
     flexDirection: 'row',
@@ -1113,30 +1290,17 @@ const s = StyleSheet.create({
     gap: 10,
     marginBottom: 10,
   },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: fonts.body,
-    color: colors.textPrimary,
-    includeFontPadding: false,
-    padding: 0,
-  },
+  input: { flex: 1, fontSize: 15, fontFamily: fonts.body, includeFontPadding: false, padding: 0 },
   clearBtn: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(31, 31, 56, 0.75)',
     borderWidth: 1,
-    borderColor: 'rgba(100, 92, 150, 0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   pills: { flexDirection: 'row', gap: 8, paddingRight: 16, paddingBottom: 4 },
-  dropdown: {
-    marginTop: 8,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
+  dropdown: { marginTop: 8 },
   dropHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1145,52 +1309,33 @@ const s = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
   },
-  dropHeaderText: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.textMuted,
-    letterSpacing: 0.8,
-  },
+  dropHeaderText: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 0.8 },
   dropItem: {
     paddingHorizontal: 16,
     paddingVertical: 13,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
   },
   dropItemRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dropItemOn: { backgroundColor: 'rgba(0,229,195,0.1)' },
-  dropCheckEmpty: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: colors.surface3,
-  },
-  dropText: { fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
-  dropTextOn: { color: colors.tealPrimary, fontFamily: fonts.bodyStrong },
+  dropCheckEmpty: { width: 16, height: 16, borderRadius: 4, borderWidth: 1.5 },
+  dropText: { fontFamily: fonts.body, fontSize: 14 },
   dropDone: {
     marginHorizontal: 14,
     marginVertical: 12,
     paddingVertical: 11,
     borderRadius: radius.full,
-    backgroundColor: colors.tealPrimary,
     alignItems: 'center',
   },
-  dropDoneText: { fontFamily: fonts.bodyStrong, fontSize: 13, color: colors.onTeal },
-
+  dropDoneText: { fontFamily: fonts.bodyStrong, fontSize: 13 },
   sheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     zIndex: 8,
-    backgroundColor: 'rgba(17,17,26,0.97)',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderTopWidth: 1,
-    borderColor: 'rgba(0,229,195,0.08)',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -1199,8 +1344,7 @@ const s = StyleSheet.create({
     elevation: 24,
   },
   handleArea: { alignItems: 'center', paddingTop: 12, paddingBottom: 8 },
-  handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.surface3 },
-
+  handleBar: { width: 40, height: 4, borderRadius: 2 },
   histScroll: { flex: 1 },
   histScrollContent: { paddingHorizontal: 16, paddingBottom: 12 },
   histHeader: {
@@ -1210,84 +1354,50 @@ const s = StyleSheet.create({
     marginBottom: 10,
     paddingTop: 4,
   },
-  histTitle: { fontFamily: fonts.label, fontSize: 11, color: colors.textMuted, letterSpacing: 1 },
-  histClear: { fontFamily: fonts.bodyStrong, fontSize: 12, color: colors.purpleSoft },
+  histTitle: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 1 },
+  histClear: { fontFamily: fonts.bodyStrong, fontSize: 12 },
   histRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
   },
-  histRowText: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.textSecondary },
+  histRowText: { flex: 1, fontFamily: fonts.body, fontSize: 14 },
   previewLabel: {
     fontFamily: fonts.label,
     fontSize: 11,
-    color: colors.tealPrimary,
     letterSpacing: 1,
     marginBottom: 10,
     marginTop: 4,
   },
-  nearbyTitle: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.goldLight,
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
+  nearbyTitle: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 1, marginBottom: 4 },
   nearbySection: { marginBottom: 12 },
   nearbyScroll: { gap: 10, paddingRight: 8, paddingTop: 6 },
   nearbyChip: {
     width: 120,
-    backgroundColor: colors.surface2,
     borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: colors.gold,
     overflow: 'hidden',
-    shadowColor: colors.gold,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3,
   },
-  nearbyChipSelected: {
-    borderColor: colors.goldLight,
-    shadowColor: colors.gold,
-    shadowOpacity: 0.45,
-    shadowRadius: 8,
-    elevation: 6,
-  },
   nearbyChipImg: { width: '100%', height: 72 },
-  nearbyChipFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface1,
-  },
+  nearbyChipFallback: { alignItems: 'center', justifyContent: 'center' },
   nearbyChipTitle: {
     fontFamily: fonts.bodyStrong,
     fontSize: 11,
-    color: colors.textSecondary,
     paddingHorizontal: 8,
     paddingVertical: 8,
     lineHeight: 14,
   },
   emptyHist: { alignItems: 'center', paddingTop: 28, gap: 10 },
-  emptyHistText: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-
+  emptyHistText: { fontFamily: fonts.body, fontSize: 13, textAlign: 'center' },
   results: { paddingHorizontal: 16, paddingBottom: 40 },
   emptyRes: { alignItems: 'center', paddingTop: 40, gap: 12 },
-  emptyResText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
+  emptyResText: { fontFamily: fonts.body, fontSize: 14, textAlign: 'center' },
 });
 
 const fp = StyleSheet.create({
@@ -1299,27 +1409,7 @@ const fp = StyleSheet.create({
     borderRadius: radius.full,
     gap: 5,
   },
-  pillActive: {
-    backgroundColor: colors.tealPrimary,
-    borderColor: colors.tealPrimary,
-    opacity: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.tealPrimary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.16,
-        shadowRadius: 4,
-      },
-      android: { elevation: 0 },
-    }),
-  },
-  label: {
-    fontFamily: fonts.bodyStrong,
-    fontSize: 12,
-    color: colors.textMuted,
-    letterSpacing: 0.2,
-  },
-  labelActive: { color: colors.onTeal },
+  label: { fontFamily: fonts.bodyStrong, fontSize: 12, letterSpacing: 0.2 },
 });
 
 const sr = StyleSheet.create({
@@ -1329,23 +1419,15 @@ const sr = StyleSheet.create({
     gap: 12,
     paddingVertical: 13,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surface3,
   },
-  name: { fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.textPrimary },
-  sub: { fontFamily: fonts.caption, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  badge: {
-    backgroundColor: colors.surface3,
-    borderRadius: radius.xs,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  eventBadge: { backgroundColor: 'rgba(0,229,195,0.1)' },
-  badgeText: { fontFamily: fonts.label, fontSize: 9, color: colors.textMuted, letterSpacing: 0.5 },
+  name: { fontFamily: fonts.bodyStrong, fontSize: 14 },
+  sub: { fontFamily: fonts.caption, fontSize: 12, marginTop: 2 },
+  badge: { borderRadius: radius.xs, paddingHorizontal: 7, paddingVertical: 3 },
+  badgeText: { fontFamily: fonts.label, fontSize: 9, letterSpacing: 0.5 },
   thumb: {
     width: 44,
     height: 44,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1356,29 +1438,17 @@ const mp = StyleSheet.create({
   wrap: { alignItems: 'center' },
   ring: {
     overflow: 'hidden',
-    backgroundColor: colors.surface2,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.55,
     shadowRadius: 8,
     elevation: 8,
   },
-  fallback: {
-    flex: 1,
-    backgroundColor: colors.surface1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tail: { width: 2.5, height: 8, borderRadius: 2, marginTop: -1 },
 });
 
 const pc = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface1,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(0,229,195,0.12)',
-    overflow: 'hidden',
-  },
+  card: { borderRadius: radius.xl, borderWidth: 1, overflow: 'hidden' },
   banner: { width: '100%', height: 160, alignItems: 'center', justifyContent: 'center' },
   liveBadge: {
     position: 'absolute',
@@ -1403,18 +1473,7 @@ const pc = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  freePill: {
-    backgroundColor: 'rgba(0,229,195,0.18)',
-    borderWidth: 1,
-    borderColor: colors.tealPrimary,
-  },
-  priceText: {
-    fontFamily: fonts.label,
-    fontSize: 11,
-    color: colors.textPrimary,
-    letterSpacing: 0.5,
-  },
-  freeText: { color: colors.tealPrimary },
+  priceText: { fontFamily: fonts.label, fontSize: 11, letterSpacing: 0.5 },
   closeBtn: {
     position: 'absolute',
     top: 10,
@@ -1434,35 +1493,21 @@ const pc = StyleSheet.create({
     paddingBottom: 6,
     gap: 10,
   },
-  avatarRing: {
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: colors.tealPrimary,
-    overflow: 'hidden',
-  },
-  orgName: { fontFamily: fonts.bodyStrong, fontSize: 14, color: colors.textPrimary },
-  orgType: {
-    fontFamily: fonts.label,
-    fontSize: 10,
-    color: colors.textMuted,
-    letterSpacing: 0.8,
-    marginTop: 2,
-  },
+  avatarRing: { borderRadius: 24, borderWidth: 2, overflow: 'hidden' },
+  orgName: { fontFamily: fonts.bodyStrong, fontSize: 14 },
+  orgType: { fontFamily: fonts.label, fontSize: 10, letterSpacing: 0.8, marginTop: 2 },
   followBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.tealPrimary,
     borderRadius: radius.full,
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
-  followingBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.tealPrimary },
-  followText: { fontFamily: fonts.bodyStrong, fontSize: 12, color: colors.onTeal },
+  followText: { fontFamily: fonts.bodyStrong, fontSize: 12 },
   title: {
     fontFamily: fonts.h2,
     fontSize: 16,
-    color: colors.textPrimary,
     paddingHorizontal: 14,
     paddingBottom: 10,
     lineHeight: 22,
@@ -1475,7 +1520,7 @@ const pc = StyleSheet.create({
     flexWrap: 'wrap',
   },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, minWidth: 120 },
-  metaText: { fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary, flex: 1 },
+  metaText: { fontFamily: fonts.body, fontSize: 12, flex: 1 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1484,44 +1529,72 @@ const pc = StyleSheet.create({
     paddingBottom: 14,
     flexWrap: 'wrap',
   },
-  catTag: {
-    backgroundColor: colors.surface3,
-    borderRadius: radius.xs,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  catText: { fontFamily: fonts.label, fontSize: 10, color: colors.purpleSoft, letterSpacing: 0.5 },
+  catTag: { borderRadius: radius.xs, paddingHorizontal: 8, paddingVertical: 4 },
+  catText: { fontFamily: fonts.label, fontSize: 10, letterSpacing: 0.5 },
   partTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.surface2,
     borderRadius: radius.xs,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  partText: { fontFamily: fonts.caption, fontSize: 11, color: colors.textMuted },
+  partText: { fontFamily: fonts.caption, fontSize: 11 },
   openBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginLeft: 'auto',
-    backgroundColor: colors.tealPrimary,
     borderRadius: radius.full,
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
-  openText: { fontFamily: fonts.bodyStrong, fontSize: 12, color: colors.onTeal },
+  openText: { fontFamily: fonts.bodyStrong, fontSize: 12 },
 });
 
 const fb = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  title: { fontFamily: fonts.h2, fontSize: 14, color: colors.surface3, letterSpacing: 2 },
-  sub: { fontFamily: fonts.body, fontSize: 13, color: colors.surface3 },
-  hint: { fontFamily: fonts.body, fontSize: 12, color: colors.textMuted },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 36,
+  },
+  iconRing: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 229, 195, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 195, 0.28)',
+    marginBottom: 4,
+  },
+  title: {
+    fontFamily: fonts.h2,
+    fontSize: 18,
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: 'rgba(196, 190, 255, 0.85)',
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  hint: {
+    fontFamily: fonts.caption,
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+  },
 });
 
-// Dark map JSON (Android / Google Maps only)
+// Dark map JSON — kept unchanged in both modes (Step 7)
 const DARK_MAP = [
   { elementType: 'geometry', stylers: [{ color: '#0e0e14' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#7a74a8' }] },

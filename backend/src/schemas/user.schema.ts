@@ -1,8 +1,33 @@
 import { z } from 'zod';
+import { displayNameSchema, emailSchema, phoneSchema } from '../utils/auth-validation.js';
+
+export const requestEmailChangeSchema = z.object({
+  email: emailSchema,
+});
+
+export const confirmEmailChangeSchema = z.object({
+  code: z
+    .string()
+    .length(6)
+    .regex(/^\d{6}$/),
+});
+
+export const requestPhoneChangeSchema = z.object({
+  phone: phoneSchema,
+});
+
+export const confirmPhoneChangeSchema = z.object({
+  code: z
+    .string()
+    .length(6)
+    .regex(/^\d{6}$/),
+});
 
 export const updateProfileSchema = z.object({
-  displayName: z.string().min(2).max(100).optional(),
+  displayName: displayNameSchema.optional(),
   bio: z.string().max(500).optional(),
+  email: emailSchema.optional(),
+  phone: phoneSchema.optional(),
   avatarUrl: z.string().url().optional().nullable(),
   coverPhotoUrl: z.string().url().optional().nullable(),
   websiteUrl: z.string().url().optional().nullable(),

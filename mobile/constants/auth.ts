@@ -1,12 +1,16 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import type { VideoSource } from 'expo-video';
 
-/** Royalty-free sports loop (Pexels). Override with EXPO_PUBLIC_AUTH_VIDEO_URI or bundle local mp4. */
-export const AUTH_VIDEO_URI =
-  process.env.EXPO_PUBLIC_AUTH_VIDEO_URI ??
-  'https://videos.pexels.com/video-files/4761414/4761414-hd_720_1280_25fps.mp4';
+/** Bundled sports/fitness loop (Mixkit, free license). Reliable offline playback. */
+const BUNDLED_AUTH_VIDEO = require('@/assets/auth/welcome-loop.mp4');
 
-export const AUTH_TAGLINE = 'Where Mumbai moves together';
+/** Optional remote override — remote URLs often 403 in dev; prefer bundled asset. */
+export function getAuthVideoSource(): VideoSource {
+  const override = process.env.EXPO_PUBLIC_AUTH_VIDEO_URI?.trim();
+  if (override) return override;
+  return BUNDLED_AUTH_VIDEO;
+}
 
 export const TERMS_URL = 'https://fitsocial.app/terms';
 export const PRIVACY_URL = 'https://fitsocial.app/privacy';
@@ -31,11 +35,23 @@ export const GOOGLE_OAUTH_EXPO_CLIENT_ID =
   GOOGLE_OAUTH_WEB_CLIENT_ID;
 
 export function isGoogleOAuthConfigured(): boolean {
-  if (Platform.OS === 'ios')
-    return Boolean(GOOGLE_OAUTH_IOS_CLIENT_ID || GOOGLE_OAUTH_EXPO_CLIENT_ID);
-  if (Platform.OS === 'android')
-    return Boolean(GOOGLE_OAUTH_ANDROID_CLIENT_ID || GOOGLE_OAUTH_EXPO_CLIENT_ID);
-  return Boolean(GOOGLE_OAUTH_WEB_CLIENT_ID || GOOGLE_OAUTH_EXPO_CLIENT_ID);
+  const { iosClientId, androidClientId, webClientId } = getGoogleOAuthClientIds();
+  if (Platform.OS === 'ios') return Boolean(iosClientId);
+  if (Platform.OS === 'android') return Boolean(androidClientId);
+  return Boolean(webClientId);
+}
+
+/** Resolved client IDs for expo-auth-session (web ID doubles as Expo Go fallback on native). */
+export function getGoogleOAuthClientIds() {
+  const webClientId = GOOGLE_OAUTH_WEB_CLIENT_ID || GOOGLE_OAUTH_EXPO_CLIENT_ID || undefined;
+  const iosClientId = GOOGLE_OAUTH_IOS_CLIENT_ID || webClientId;
+  const androidClientId = GOOGLE_OAUTH_ANDROID_CLIENT_ID || webClientId;
+
+  return {
+    webClientId,
+    iosClientId,
+    androidClientId,
+  };
 }
 
 export function isAppleSignInAvailable(): boolean {

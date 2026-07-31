@@ -1,6 +1,7 @@
 import { Text, StyleSheet, Linking } from 'react-native';
 import { fonts } from '@/constants/theme';
 import { TERMS_URL, PRIVACY_URL } from '@/constants/auth';
+import { onVideo } from '@/components/auth/onVideoColors';
 
 export default function AuthLegalFooter() {
   return (
@@ -26,12 +27,13 @@ const s = StyleSheet.create({
     fontFamily: fonts.caption,
     fontSize: 12,
     lineHeight: 18,
-    color: 'rgba(255,255,255,0.72)',
+    // on-video text: always light over dark video
+    color: onVideo.textSecondary,
     textAlign: 'center',
     paddingHorizontal: 32,
   },
   link: {
     textDecorationLine: 'underline',
-    color: '#FFFFFF',
+    color: onVideo.text,
   },
 });

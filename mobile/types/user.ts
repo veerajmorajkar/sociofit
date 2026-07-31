@@ -1,3 +1,5 @@
+import type { ClubAnnouncementChannel } from './message';
+
 export interface ClubProfile {
   id: string;
   userId: string;
@@ -36,6 +38,7 @@ export interface UserProfile {
   isFollowing: boolean;
   isOwnProfile: boolean;
   clubProfile: ClubProfile | null;
+  announcementChannel?: ClubAnnouncementChannel | null;
 }
 
 export interface UserSummary {

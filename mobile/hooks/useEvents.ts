@@ -173,7 +173,7 @@ export function useRsvpEvent() {
 
       patchEventCaches(queryClient, eventId, {
         isRsvped: joining,
-        participantCount: Math.max(0, baseCount + (joining ? 1 : -1)),
+        participantCount: Math.max(1, baseCount + (joining ? 1 : -1)),
       });
 
       return { previousEvents, previousEvent };

@@ -1,30 +1,124 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { router } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AuthVideoBackdrop from '@/components/auth/AuthVideoBackdrop';
+import AuthBackButton from '@/components/auth/AuthBackButton';
 import AuthHeroBrand from '@/components/auth/AuthHeroBrand';
 import AuthLegalFooter from '@/components/auth/AuthLegalFooter';
+import AccountTypeIcon from '@/components/auth/AccountTypeIcon';
+import { onVideo } from '@/components/auth/onVideoColors';
 import { accountTypeSignupLabel } from '@/constants/accountType';
 import { fonts, radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
+import { selectHaptic } from '@/utils/haptics';
 
 type AccountType = 'personal' | 'club';
 
+/** Beat between the selection animation and navigating on. */
+const SELECT_NAV_DELAY_MS = 260;
+
+interface TypeCardProps {
+  type: AccountType;
+  selected: AccountType | null;
+  onSelect: (type: AccountType) => void;
+}
+
+function TypeCard({ type, selected, onSelect }: TypeCardProps) {
+  const { theme } = useTheme();
+  const isSelected = selected === type;
+  const isDimmed = selected !== null && !isSelected;
+
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: isSelected ? 1.04 : 1,
+        useNativeDriver: true,
+        speed: 24,
+        bounciness: 9,
+      }),
+      Animated.timing(opacity, {
+        toValue: isSelected ? 1 : isDimmed ? 0.45 : 0.9,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isSelected, isDimmed, scale, opacity]);
+
+  // Brand accent per type: teal for athletes, purple for clubs.
+  const accent = type === 'club' ? theme.purpleHero : theme.tealPrimary;
+
+  return (
+    <Pressable
+      onPress={() => onSelect(type)}
+      disabled={selected !== null}
+      accessibilityRole="button"
+      accessibilityLabel={`Join as ${accountTypeSignupLabel(type)}`}
+      accessibilityState={{ selected: isSelected }}
+    >
+      <Animated.View
+        style={[
+          s.typeCard,
+          { opacity, transform: [{ scale }] },
+          isSelected && {
+            borderColor: accent,
+            shadowColor: accent,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.45,
+            shadowRadius: 16,
+            elevation: 10,
+          },
+        ]}
+      >
+        <View style={s.typeIconWrap}>
+          <AccountTypeIcon type={type} size={48} selected={selected === null || isSelected} />
+        </View>
+        <Text style={s.typeLabel}>{accountTypeSignupLabel(type)}</Text>
+        <Text style={s.typeHint}>
+          {type === 'personal'
+            ? 'Train, connect & join events'
+            : 'Host sessions & grow your community'}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 export default function SignupTypeScreen() {
+  const [selected, setSelected] = useState<AccountType | null>(null);
+  const navTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset selection when returning to this screen so no card stays "picked".
+  useFocusEffect(
+    useCallback(() => {
+      setSelected(null);
+      return () => {
+        if (navTimer.current) clearTimeout(navTimer.current);
+      };
+    }, []),
+  );
+
   const pick = (accountType: AccountType) => {
-    router.push({
-      pathname: '/(auth)/login-options',
-      params: { mode: 'signup', accountType },
-    });
+    selectHaptic();
+    setSelected(accountType);
+    // Let the selection spring/glow land before pushing the next screen.
+    navTimer.current = setTimeout(() => {
+      router.push({
+        pathname: '/(auth)/login-options',
+        params: { mode: 'signup', accountType },
+      });
+    }, SELECT_NAV_DELAY_MS);
   };
 
   return (
     <AuthVideoBackdrop>
       <StatusBar style="light" />
       <SafeAreaView style={s.safe}>
-        <TouchableOpacity onPress={() => router.back()} style={s.back} accessibilityRole="button">
-          <Text style={s.backText}>← Back</Text>
-        </TouchableOpacity>
+        <AuthBackButton style={s.back} />
 
         <View style={s.center}>
           <AuthHeroBrand />
@@ -32,21 +126,7 @@ export default function SignupTypeScreen() {
 
           <View style={s.typeRow}>
             {(['personal', 'club'] as const).map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[s.typeCard, type === 'club' && s.typeCardClub]}
-                onPress={() => pick(type)}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-              >
-                <Text style={s.typeEmoji}>{type === 'personal' ? '🏃' : '🏢'}</Text>
-                <Text style={s.typeLabel}>{accountTypeSignupLabel(type)}</Text>
-                <Text style={s.typeHint}>
-                  {type === 'personal'
-                    ? 'Train, connect & join events'
-                    : 'Host sessions & grow your community'}
-                </Text>
-              </TouchableOpacity>
+              <TypeCard key={type} type={type} selected={selected} onSelect={pick} />
             ))}
           </View>
         </View>
@@ -61,42 +141,39 @@ export default function SignupTypeScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1 },
-  back: { paddingHorizontal: 24, paddingTop: 8 },
-  backText: { fontFamily: fonts.bodyStrong, fontSize: 16, color: '#FFFFFF' },
+  back: { marginLeft: 20, marginTop: 4, marginBottom: 4 },
   center: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, gap: 28 },
   prompt: {
     fontFamily: fonts.h3,
     fontSize: 18,
-    color: '#FFFFFF',
+    // on-video text: always light over dark video
+    color: onVideo.text,
     textAlign: 'center',
     marginTop: 8,
   },
   typeRow: { gap: 14 },
   typeCard: {
-    backgroundColor: 'rgba(23,23,42,0.82)',
+    // on-video glass card: unselected state is muted; selection adds accent + glow
+    backgroundColor: onVideo.glassCard,
     borderRadius: radius.lg,
     borderWidth: 1.5,
-    borderColor: 'rgba(0,229,195,0.55)',
+    borderColor: onVideo.borderMuted,
     paddingVertical: 22,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
-  typeCardClub: {
-    borderColor: 'rgba(123,77,255,0.65)',
-  },
-  typeEmoji: { fontSize: 28, marginBottom: 8 },
+  typeIconWrap: { marginBottom: 10 },
   typeLabel: {
     fontFamily: fonts.h2,
-    fontSize: 16,
-    color: '#FFFFFF',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontSize: 17,
+    color: onVideo.text,
+    letterSpacing: 0.2,
     marginBottom: 6,
   },
   typeHint: {
     fontFamily: fonts.caption,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
+    color: onVideo.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
   },

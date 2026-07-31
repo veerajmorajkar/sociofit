@@ -1,13 +1,15 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AuthVideoBackdrop from '@/components/auth/AuthVideoBackdrop';
+import AuthBackButton from '@/components/auth/AuthBackButton';
 import AuthHeroBrand from '@/components/auth/AuthHeroBrand';
 import AuthLegalFooter from '@/components/auth/AuthLegalFooter';
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons';
 import { accountTypeSignupLabel } from '@/constants/accountType';
 import { fonts } from '@/constants/theme';
+import { onVideo } from '@/components/auth/onVideoColors';
 
 type AccountType = 'personal' | 'club';
 type AuthMode = 'login' | 'signup';
@@ -17,9 +19,10 @@ export default function LoginOptionsScreen() {
   const mode: AuthMode = params.mode === 'signup' ? 'signup' : 'login';
   const accountType = (params.accountType === 'club' ? 'club' : 'personal') as AccountType;
 
-  const goEmail = () => {
+  const goContact = () => {
     if (mode === 'signup') {
-      router.push({ pathname: '/(auth)/signup', params: { accountType } });
+      const pathname = accountType === 'club' ? '/(auth)/signup-club' : '/(auth)/signup-athlete';
+      router.push(pathname);
     } else {
       router.push('/(auth)/login');
     }
@@ -29,6 +32,8 @@ export default function LoginOptionsScreen() {
     <AuthVideoBackdrop>
       <StatusBar style="light" />
       <SafeAreaView style={s.safe}>
+        <AuthBackButton style={s.back} />
+
         <View style={s.top}>
           <AuthHeroBrand />
           {mode === 'signup' && (
@@ -39,15 +44,8 @@ export default function LoginOptionsScreen() {
         <View style={s.bottom}>
           <AuthLegalFooter />
           <View style={s.buttons}>
-            <SocialAuthButtons mode={mode} accountType={accountType} onPhonePress={goEmail} />
+            <SocialAuthButtons mode={mode} accountType={accountType} onContactPress={goContact} />
           </View>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={s.backBtn}
-            accessibilityRole="button"
-          >
-            <Text style={s.backText}>Back</Text>
-          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </AuthVideoBackdrop>
@@ -56,11 +54,13 @@ export default function LoginOptionsScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, justifyContent: 'space-between' },
+  back: { marginLeft: 20, marginTop: 4 },
   top: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, gap: 12 },
   subtitle: {
     fontFamily: fonts.caption,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.75)',
+    // on-video text: always light over dark video
+    color: onVideo.textSecondary,
     textAlign: 'center',
     marginTop: 4,
   },
@@ -71,6 +71,4 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   buttons: { width: '100%', marginTop: 4 },
-  backBtn: { paddingVertical: 10 },
-  backText: { fontFamily: fonts.h3, fontSize: 16, color: '#FFFFFF' },
 });

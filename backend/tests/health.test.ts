@@ -5,9 +5,11 @@ import type { FastifyInstance } from 'fastify';
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL = 'postgresql://fitsocial:fitsocial@localhost:5432/fitsocial';
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret-1234567890';
-  process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-1234567890';
+  // Use `??=` so a CI-provided DATABASE_URL (pointing at the CI Postgres
+  // service's actual database name) isn't clobbered by this local default.
+  process.env.DATABASE_URL ??= 'postgresql://fitsocial:fitsocial@localhost:5432/fitsocial';
+  process.env.JWT_ACCESS_SECRET ??= 'test-access-secret-1234567890';
+  process.env.JWT_REFRESH_SECRET ??= 'test-refresh-secret-1234567890';
   app = await buildApp();
 });
 

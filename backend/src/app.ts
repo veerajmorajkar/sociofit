@@ -14,9 +14,11 @@ import { eventRoutes } from './routes/events.js';
 import { categoryRoutes } from './routes/categories.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { placesRoutes } from './routes/places.js';
+import { moderationRoutes } from './routes/moderation.js';
 
 export async function buildApp() {
   const app = Fastify({
+    trustProxy: env.NODE_ENV === 'production',
     logger:
       env.NODE_ENV !== 'test'
         ? {
@@ -39,9 +41,18 @@ export async function buildApp() {
     origin: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
     credentials: true,
   });
+  const rateLimitHeaders = {
+    'x-ratelimit-limit': false,
+    'x-ratelimit-remaining': false,
+    'x-ratelimit-reset': false,
+    'retry-after': false,
+  } as const;
+
   await app.register(rateLimit, {
     max: env.NODE_ENV === 'production' ? 100 : 300,
     timeWindow: '1 minute',
+    addHeaders: rateLimitHeaders,
+    addHeadersOnExceeding: rateLimitHeaders,
   });
 
   // Error handler
@@ -57,6 +68,8 @@ export async function buildApp() {
       await authScope.register(rateLimit, {
         max: env.NODE_ENV === 'production' ? 15 : 80,
         timeWindow: '1 minute',
+        addHeaders: rateLimitHeaders,
+        addHeadersOnExceeding: rateLimitHeaders,
       });
       await authScope.register(authRoutes);
     },
@@ -70,6 +83,7 @@ export async function buildApp() {
   await app.register(categoryRoutes, { prefix: `${prefix}/categories` });
   await app.register(notificationRoutes, { prefix: `${prefix}/notifications` });
   await app.register(placesRoutes, { prefix: `${prefix}/places` });
+  await app.register(moderationRoutes, { prefix: `${prefix}/moderation` });
 
   return app;
 }

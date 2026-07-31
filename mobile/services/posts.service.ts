@@ -1,11 +1,13 @@
 import { api } from './api';
 import type { Post, Comment } from '@/types/post';
+import type { FeedActivitySnapshot, FeedItem } from '@/types/feed';
 
 export interface FeedPage {
-  data: Post[];
+  data: FeedItem[];
   meta: {
     cursor: string | null;
     hasMore: boolean;
+    activity?: FeedActivitySnapshot;
   };
 }
 
@@ -13,13 +15,14 @@ export async function getFeed(cursor?: string): Promise<FeedPage> {
   const params = new URLSearchParams({ limit: '20' });
   if (cursor) params.set('cursor', cursor);
 
-  const res = await api.get<Post[]>(`/posts/feed?${params.toString()}`);
+  const res = await api.get<FeedItem[]>(`/posts/feed?${params.toString()}`);
 
   return {
     data: res.data ?? [],
     meta: {
       cursor: res.meta?.cursor ?? null,
       hasMore: res.meta?.hasMore ?? false,
+      activity: res.meta?.activity as FeedActivitySnapshot | undefined,
     },
   };
 }
@@ -114,7 +117,15 @@ export async function deletePost(postId: string): Promise<void> {
   if (!res.success) throw new Error(res.error ?? 'Failed to delete post');
 }
 
-export async function getUserPosts(userId: string, cursor?: string): Promise<FeedPage> {
+export interface UserPostsPage {
+  data: Post[];
+  meta: {
+    cursor: string | null;
+    hasMore: boolean;
+  };
+}
+
+export async function getUserPosts(userId: string, cursor?: string): Promise<UserPostsPage> {
   const params = new URLSearchParams({ limit: '20' });
   if (cursor) params.set('cursor', cursor);
 

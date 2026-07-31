@@ -1,65 +1,60 @@
-import { useEffect, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import type { ComponentType } from 'react';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import { AUTH_VIDEO_URI } from '@/constants/auth';
-
-const POSTER = require('@/assets/auth/poster.jpg');
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
 interface Props {
   children?: React.ReactNode;
 }
 
-export default function AuthVideoBackdrop({ children }: Props) {
-  const [videoFailed, setVideoFailed] = useState(false);
-  const player = useVideoPlayer(AUTH_VIDEO_URI, (p) => {
-    p.loop = true;
-    p.muted = true;
-    p.play();
-  });
+const hasExpoVideo = requireOptionalNativeModule('ExpoVideo') != null;
+
+// Optional native module — only load the video layer when ExpoVideo exists (dev/prod builds).
+const AuthVideoLayer = hasExpoVideo
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports -- conditional native import
+    (require('./AuthVideoLayer').default as ComponentType<Props>)
+  : null;
+
+function GradientBackdrop({ children }: Props) {
+  const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const sub = player.addListener('statusChange', ({ status, error }) => {
-      if (status === 'error' || error) setVideoFailed(true);
-    });
-    return () => sub.remove();
-  }, [player]);
+    Animated.timing(contentOpacity, {
+      toValue: 1,
+      duration: 420,
+      useNativeDriver: true,
+    }).start();
+  }, [contentOpacity]);
 
   return (
     <View style={s.root}>
-      {!videoFailed ? (
-        <VideoView
-          player={player}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          nativeControls={false}
-          allowsFullscreen={false}
-          allowsPictureInPicture={false}
-        />
-      ) : (
-        <Image
-          source={POSTER}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          accessibilityIgnoresInvertColors
-        />
-      )}
-
       <LinearGradient
-        colors={['rgba(14,14,20,0.35)', 'rgba(14,14,20,0.55)', 'rgba(14,14,20,0.92)']}
+        colors={['rgba(14,14,20,0.85)', 'rgba(14,14,20,0.92)', 'rgba(14,14,20,0.98)']}
         locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-
-      {children}
+      <Animated.View style={[s.content, { opacity: contentOpacity }]}>{children}</Animated.View>
     </View>
   );
+}
+
+/** Auth backdrop — video when native module exists (dev build), gradient fallback in Expo Go. */
+export default function AuthVideoBackdrop({ children }: Props) {
+  if (AuthVideoLayer) {
+    return <AuthVideoLayer>{children}</AuthVideoLayer>;
+  }
+  return <GradientBackdrop>{children}</GradientBackdrop>;
 }
 
 const s = StyleSheet.create({
   root: {
     flex: 1,
+    // Deliberately dark in BOTH themes — the backdrop stands in for the dark video.
     backgroundColor: '#0E0E14',
+  },
+  content: {
+    flex: 1,
   },
 });

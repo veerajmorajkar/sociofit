@@ -1,148 +1,179 @@
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import AuthFormShell from '@/components/auth/AuthFormShell';
+import AuthCtaButton from '@/components/auth/AuthCtaButton';
+import PasswordInput from '@/components/auth/PasswordInput';
+import StaggeredListItem from '@/components/ui/StaggeredListItem';
+import { onVideo } from '@/components/auth/onVideoColors';
 import { login } from '@/services/auth.service';
 import { useAuthStore } from '@/stores/authStore';
 import { radius, fonts } from '@/constants/theme';
-import { API_URL } from '@/constants/config';
+import { useTheme } from '@/contexts/ThemeContext';
+import { sanitizeEmailInput, validateEmail } from '@/utils/authValidation';
 
 export default function LoginScreen() {
+  const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const setAuth = useAuthStore((s) => s.setAuth);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please enter your email and password.');
+    const emailError = validateEmail(email);
+    if (emailError) {
+      Alert.alert('Invalid email', emailError);
       return;
     }
+    if (!password.trim()) {
+      Alert.alert('Missing password', 'Please enter your password.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await login({ email: email.trim(), password });
+      const result = await login({
+        email: sanitizeEmailInput(email),
+        password,
+      });
+
       if (result.success) {
+        if (result.data.needsEmailVerification) {
+          router.replace({
+            pathname: '/(auth)/verify-email',
+            params: {
+              email: result.data.email,
+              maskedEmail: result.data.maskedEmail,
+            },
+          });
+          return;
+        }
         await setAuth(result.data.user, result.data.accessToken, result.data.refreshToken);
         router.replace('/(tabs)');
-      } else {
-        Alert.alert('Login failed', result.error ?? 'Invalid credentials.');
+        return;
       }
-    } catch (err) {
+
+      Alert.alert('Login failed', result.error ?? 'Invalid credentials.');
+    } catch {
       Alert.alert(
         'Connection error',
-        `${err instanceof Error ? err.message : 'Could not reach the server.'}\n\nAPI: ${API_URL}`,
+        'Could not reach the server. Check your internet connection and try again.',
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const inputStyle = [s.input, { borderColor: 'rgba(255,255,255,0.15)', color: '#FFFFFF' }];
-
   return (
     <AuthFormShell>
-      <TouchableOpacity onPress={() => router.back()} style={s.back} accessibilityRole="button">
-        <Text style={s.backText}>← Back</Text>
-      </TouchableOpacity>
+      <StaggeredListItem index={0}>
+        <Text style={s.title}>Welcome back</Text>
+        <Text style={s.subtitle}>Sign in with your email and password.</Text>
+      </StaggeredListItem>
 
-      <Text style={s.title}>Welcome back</Text>
-      <Text style={s.subtitle}>Sign in with your email and password</Text>
+      <StaggeredListItem index={1}>
+        <Text style={s.sectionLabel}>Email</Text>
+        <TextInput
+          style={s.input}
+          placeholder="Email address"
+          placeholderTextColor={onVideo.textFaint}
+          value={email}
+          onChangeText={(text) => setEmail(sanitizeEmailInput(text))}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          editable={!loading}
+          maxLength={254}
+          accessibilityLabel="Email input"
+        />
+      </StaggeredListItem>
 
-      <TextInput
-        style={inputStyle}
-        placeholder="Email"
-        placeholderTextColor="rgba(255,255,255,0.45)"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        editable={!loading}
-        accessibilityLabel="Email input"
-      />
+      <StaggeredListItem index={2}>
+        <View style={s.labelRow}>
+          <Text style={[s.sectionLabel, s.labelInRow]}>Password</Text>
+          <Link href="/(auth)/forgot-password" asChild>
+            <TouchableOpacity accessibilityRole="link" hitSlop={8}>
+              <Text style={[s.forgotText, { color: theme.tealPrimary }]}>Forgot password?</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+        <PasswordInput
+          containerStyle={s.passwordField}
+          inputStyle={s.passwordInput}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          editable={!loading}
+          onSubmitEditing={() => void handleLogin()}
+          returnKeyType="go"
+          accessibilityLabel="Password input"
+        />
+      </StaggeredListItem>
 
-      <TextInput
-        style={[...inputStyle, s.inputLast]}
-        placeholder="Password"
-        placeholderTextColor="rgba(255,255,255,0.45)"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        editable={!loading}
-        onSubmitEditing={() => void handleLogin()}
-        returnKeyType="go"
-        accessibilityLabel="Password input"
-      />
+      <StaggeredListItem index={3}>
+        <AuthCtaButton
+          label="Log in"
+          onPress={() => void handleLogin()}
+          loading={loading}
+          style={s.cta}
+        />
+      </StaggeredListItem>
 
-      <Link href="/(auth)/forgot-password" asChild>
-        <TouchableOpacity style={s.forgotRow} accessibilityRole="link">
-          <Text style={s.forgotText}>Forgot password?</Text>
-        </TouchableOpacity>
-      </Link>
-
-      <TouchableOpacity
-        style={[s.btn, loading && s.btnDisabled]}
-        onPress={() => void handleLogin()}
-        disabled={loading}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-      >
-        {loading ? <ActivityIndicator color="#001A14" /> : <Text style={s.btnText}>LOG IN</Text>}
-      </TouchableOpacity>
-
-      <View style={s.switchRow}>
-        <Text style={s.switchLabel}>New here? </Text>
-        <Link href="/(auth)/signup-type" asChild>
-          <TouchableOpacity accessibilityRole="link">
-            <Text style={s.switchAction}>Create account</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
+      <StaggeredListItem index={4}>
+        <View style={s.switchRow}>
+          <Text style={s.switchLabel}>New here? </Text>
+          <Link href="/(auth)/signup-type" asChild>
+            <TouchableOpacity accessibilityRole="link">
+              <Text style={[s.switchAction, { color: theme.tealPrimary }]}>Create account</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      </StaggeredListItem>
     </AuthFormShell>
   );
 }
 
 const s = StyleSheet.create({
-  back: { marginBottom: 16 },
-  backText: { fontFamily: fonts.bodyStrong, fontSize: 15, color: '#A882FF' },
-  title: { fontFamily: fonts.h1, fontSize: 28, color: '#FFFFFF', marginBottom: 8 },
+  // on-video text: always light over dark video
+  title: { fontFamily: fonts.h1, fontSize: 28, color: onVideo.text, marginBottom: 8 },
   subtitle: {
     fontFamily: fonts.body,
     fontSize: 15,
-    color: 'rgba(255,255,255,0.72)',
-    marginBottom: 28,
+    color: onVideo.textSecondary,
+    marginBottom: 24,
+    lineHeight: 22,
   },
+  sectionLabel: {
+    fontFamily: fonts.label,
+    fontSize: 13,
+    color: onVideo.label,
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  labelInRow: { marginBottom: 0 },
   input: {
     borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 15,
     fontFamily: fonts.body,
-    marginBottom: 12,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  inputLast: { marginBottom: 14 },
-  forgotRow: { alignSelf: 'flex-end', marginBottom: 24 },
-  forgotText: { fontFamily: fonts.bodyStrong, fontSize: 13, color: '#A882FF' },
-  btn: {
-    borderRadius: radius.md,
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 20,
-    backgroundColor: '#00E5C3',
+    borderWidth: 1,
+    // on-video glass input: always light over dark video
+    color: onVideo.text,
+    borderColor: onVideo.inputBorder,
+    backgroundColor: onVideo.inputBg,
   },
-  btnDisabled: { opacity: 0.65 },
-  btnText: { fontFamily: fonts.h2, fontSize: 15, color: '#001A14', letterSpacing: 1 },
+  passwordField: { marginBottom: 24 },
+  passwordInput: { paddingVertical: 16 },
+  forgotText: { fontFamily: fonts.semibold, fontSize: 13 },
+  cta: { marginBottom: 20 },
   switchRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   switchLabel: { fontFamily: fonts.body, fontSize: 14, color: 'rgba(255,255,255,0.65)' },
-  switchAction: { fontFamily: fonts.bodyStrong, fontSize: 14, color: '#00E5C3' },
+  switchAction: { fontFamily: fonts.bodyStrong, fontSize: 14 },
 });

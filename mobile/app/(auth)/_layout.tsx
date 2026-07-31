@@ -7,8 +7,12 @@ export default function AuthLayout() {
       <Stack.Screen name="signup-type" />
       <Stack.Screen name="login-options" />
       <Stack.Screen name="login" />
+      <Stack.Screen name="signup-athlete" />
+      <Stack.Screen name="signup-club" />
       <Stack.Screen name="signup" />
       <Stack.Screen name="oauth-complete" />
+      <Stack.Screen name="link-account" />
+      <Stack.Screen name="verify-email" />
       <Stack.Screen name="forgot-password" />
       <Stack.Screen name="reset-password" />
       <Stack.Screen name="onboarding" />

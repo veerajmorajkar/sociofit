@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 function getAutoDetectedApiUrl(): string {
   if (!__DEV__) {
-    return 'https://api.fitsocial.app/api/v1';
+    return 'https://api.mumbaifitnessmafia.com/api/v1';
   }
 
   // Grab the host Metro is serving from — works with Expo Go and dev client.

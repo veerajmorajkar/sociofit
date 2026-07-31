@@ -22,6 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run check:env-example
 
   backend-test:
     name: Backend — Tests
@@ -66,6 +67,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run db:push:force
       - run: npm run test
 
   mobile-lint:

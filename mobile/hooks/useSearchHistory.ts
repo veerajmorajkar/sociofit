@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { useFocusEffect } from 'expo-router';
 
 const KEY = '@mfm_search_history';
 const LEGACY_SECURE_KEY = 'mfm_search_history';
@@ -36,59 +35,71 @@ async function load(): Promise<string[]> {
 }
 
 async function save(items: string[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(items));
-  } catch {
-    // non-critical
-  }
+  await AsyncStorage.setItem(KEY, JSON.stringify(items));
 }
 
 export function useSearchHistory() {
   const [history, setHistory] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
+  const historyRef = useRef<string[]>([]);
+  const loadSeq = useRef(0);
+
+  const applyHistory = useCallback((items: string[]) => {
+    historyRef.current = items;
+    setHistory(items);
+  }, []);
 
   const refresh = useCallback(() => {
-    void load().then((items) => {
-      setHistory(items);
-      setReady(true);
-    });
-  }, []);
+    const seq = ++loadSeq.current;
+    void load()
+      .then((items) => {
+        if (seq !== loadSeq.current) return;
+        applyHistory(items);
+        setReady(true);
+      })
+      .catch(() => {
+        if (seq !== loadSeq.current) return;
+        setReady(true);
+      });
+  }, [applyHistory]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [refresh]),
+  const persist = useCallback(
+    async (items: string[]) => {
+      applyHistory(items);
+      try {
+        await save(items);
+      } catch {
+        // non-critical
+      }
+    },
+    [applyHistory],
   );
 
-  const persist = useCallback((items: string[]) => {
-    setHistory(items);
-    void save(items);
-  }, []);
+  const addToHistory = useCallback(
+    (term: string) => {
+      const trimmed = term.trim();
+      if (trimmed.length < 1) return;
 
-  const addToHistory = useCallback((term: string) => {
-    const trimmed = term.trim();
-    if (trimmed.length < 1) return;
-    setHistory((prev) => {
-      const next = [trimmed, ...prev.filter((h) => h !== trimmed)].slice(0, MAX);
-      void save(next);
-      return next;
-    });
-  }, []);
+      const next = [trimmed, ...historyRef.current.filter((h) => h !== trimmed)].slice(0, MAX);
+      void persist(next);
+    },
+    [persist],
+  );
 
-  const removeFromHistory = useCallback((term: string) => {
-    setHistory((prev) => {
-      const next = prev.filter((h) => h !== term);
-      void save(next);
-      return next;
-    });
-  }, []);
+  const removeFromHistory = useCallback(
+    (term: string) => {
+      const next = historyRef.current.filter((h) => h !== term);
+      void persist(next);
+    },
+    [persist],
+  );
 
   const clearHistory = useCallback(() => {
-    persist([]);
+    void persist([]);
   }, [persist]);
 
   return { history, ready, addToHistory, removeFromHistory, clearHistory };

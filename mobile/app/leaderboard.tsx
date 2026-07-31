@@ -1,24 +1,26 @@
 import { View, Text } from 'react-native';
 import { Trophy } from 'lucide-react-native';
-import { colors, fonts } from '@/constants/theme';
+import { fonts } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function LeaderboardScreen() {
+  const { theme } = useTheme();
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.bgPrimary,
+        backgroundColor: theme.bgPrimary,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 32,
       }}
     >
-      <Trophy size={40} strokeWidth={1.5} color={colors.gold} />
+      <Trophy size={40} strokeWidth={1.5} color={theme.gold} />
       <Text
         style={{
           fontFamily: fonts.h1,
           fontSize: 18,
-          color: colors.textPrimary,
+          color: theme.textPrimary,
           marginTop: 16,
           textTransform: 'uppercase',
           letterSpacing: -0.5,
@@ -30,7 +32,7 @@ export default function LeaderboardScreen() {
         style={{
           fontFamily: fonts.body,
           fontSize: 14,
-          color: colors.textSecondary,
+          color: theme.textSecondary,
           marginTop: 8,
           textAlign: 'center',
           lineHeight: 22,

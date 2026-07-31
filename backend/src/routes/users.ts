@@ -1,6 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
-import { updateProfileSchema, paginationSchema } from '../schemas/user.schema.js';
+import {
+  updateProfileSchema,
+  paginationSchema,
+  requestEmailChangeSchema,
+  confirmEmailChangeSchema,
+  requestPhoneChangeSchema,
+  confirmPhoneChangeSchema,
+} from '../schemas/user.schema.js';
 import {
   getProfile,
   updateProfile,
@@ -11,6 +18,12 @@ import {
   getFollowing,
   savePushToken,
 } from '../services/user.service.js';
+import {
+  requestEmailChange,
+  confirmEmailChange,
+  requestPhoneChange,
+  confirmPhoneChange,
+} from '../services/contact-change.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 export function userRoutes(app: FastifyInstance) {
@@ -23,10 +36,62 @@ export function userRoutes(app: FastifyInstance) {
 
   // ── Update own profile ────────────────────────────────────
   app.patch('/me', { preHandler: authenticate }, async (request, reply) => {
-    const body = updateProfileSchema.parse(request.body);
-    const updated = await updateProfile(request.user!.userId, body);
-    if (!updated) return sendError(reply, 'Failed to update profile', 500);
-    return sendSuccess(reply, updated);
+    try {
+      const body = updateProfileSchema.parse(request.body);
+      const updated = await updateProfile(request.user!.userId, body);
+      if (!updated) return sendError(reply, 'Failed to update profile', 500);
+      return sendSuccess(reply, updated);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update profile';
+      const status = message.includes('already in use') ? 409 : 400;
+      return sendError(reply, message, status);
+    }
+  });
+
+  // ── Email change (OTP-verified, never a direct write-through) ──
+  app.post('/me/email/request-change', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const body = requestEmailChangeSchema.parse(request.body);
+      const result = await requestEmailChange(request.user!.userId, body.email);
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to request email change';
+      return sendError(reply, message, message.includes('already in use') ? 409 : 400);
+    }
+  });
+
+  app.post('/me/email/confirm-change', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const body = confirmEmailChangeSchema.parse(request.body);
+      const result = await confirmEmailChange(request.user!.userId, body.code);
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to confirm email change';
+      return sendError(reply, message, 400);
+    }
+  });
+
+  // ── Phone change (OTP-verified, never a direct write-through) ──
+  app.post('/me/phone/request-change', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const body = requestPhoneChangeSchema.parse(request.body);
+      const result = await requestPhoneChange(request.user!.userId, body.phone);
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to request phone change';
+      return sendError(reply, message, message.includes('already in use') ? 409 : 400);
+    }
+  });
+
+  app.post('/me/phone/confirm-change', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const body = confirmPhoneChangeSchema.parse(request.body);
+      const result = await confirmPhoneChange(request.user!.userId, body.code);
+      return sendSuccess(reply, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to confirm phone change';
+      return sendError(reply, message, 400);
+    }
   });
 
   // ── Search users ──────────────────────────────────────────

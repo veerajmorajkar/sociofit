@@ -5,6 +5,7 @@ export interface EventOrganiser {
   avatarUrl: string | null;
   accountType: 'personal' | 'club';
   isVerified: boolean;
+  hostedEventsCount?: number;
 }
 
 export interface EventCategory {
@@ -22,6 +23,8 @@ export interface Event {
   description: string | null;
   categoryId: string;
   coverImageUrl: string | null;
+  /** Server-analyzed nav ink tone for the cover top band */
+  coverNavTone: 'light' | 'dark' | null;
   startTime: string;
   endTime: string;
   latitude: string;
@@ -35,6 +38,8 @@ export interface Event {
   status: EventStatus;
   chatroomActive: boolean;
   chatroomExpiresAt: string | null;
+  /** Event discussion conversation id — present when user has joined */
+  discussionId?: string | null;
   avgRating: string;
   totalReviews: number;
   isActive: boolean;
